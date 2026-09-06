@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Taken from BRAND in Config.gs so the app and the spreadsheets match. -->
+    <color name="brand_green">#0F5132</color>
+    <color name="brand_gold">#C9A227</color>
+    <color name="window_background">#FBFCFB</color>
+</resources>
