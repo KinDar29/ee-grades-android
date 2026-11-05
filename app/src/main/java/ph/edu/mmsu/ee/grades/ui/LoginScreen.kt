@@ -30,7 +30,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +58,20 @@ fun LoginScreen(
     val vm: LoginViewModel = viewModel()
     val portal = vm.portal
     val isAdmin = vm.role == "admin"
+    var forgotOpen by rememberSaveable { mutableStateOf(false) }
+
+    if (forgotOpen) {
+        ForgotPasswordScreen(
+            role = vm.role,
+            initialUsername = vm.username.trim(),
+            onDone = { user ->
+                vm.onPasswordReset(user)
+                forgotOpen = false
+            },
+            onCancel = { forgotOpen = false }
+        )
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -168,6 +187,11 @@ fun LoginScreen(
         if (message != null) {
             Spacer(Modifier.height(14.dp))
             ErrorBanner(message = message)
+        } else {
+            vm.success?.let {
+                Spacer(Modifier.height(14.dp))
+                InfoBanner(message = it)
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -190,6 +214,14 @@ fun LoginScreen(
             } else {
                 Text("Sign in")
             }
+        }
+
+        TextButton(
+            onClick = { forgotOpen = true },
+            enabled = !vm.busy,
+            modifier = Modifier.padding(top = 4.dp)
+        ) {
+            Text("Forgot password?")
         }
 
         val announcement = portal?.announcement.orEmpty()

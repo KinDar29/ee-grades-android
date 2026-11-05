@@ -109,6 +109,26 @@ fun MessageBlock(
     }
 }
 
+/** A neutral strip for good news or instructions (e.g. "a code is on its way"). */
+@Composable
+fun InfoBanner(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+        )
+    }
+}
+
 /** A red strip for something that failed but did not empty the screen. */
 @Composable
 fun ErrorBanner(

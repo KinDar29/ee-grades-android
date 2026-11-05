@@ -134,6 +134,12 @@ data class TokenOnly(
     val token: String = ""
 )
 
+/** Reply to "forgotPassword": a message that never says whether the account exists. */
+@Serializable
+data class MessageOnly(
+    val message: String = ""
+)
+
 @Serializable
 data class PortalInfo(
     val ready: Boolean = false,

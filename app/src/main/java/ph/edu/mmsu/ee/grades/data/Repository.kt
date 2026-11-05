@@ -81,6 +81,35 @@ class Repository(
         if (issued.token.isNotBlank()) store.setToken(issued.token)
     }
 
+    /**
+     * Step 1 of "forgot password": the server e-mails a 6-digit code to the
+     * address on file. The reply is deliberately the same whether or not the
+     * account exists, so it is shown to the person as-is.
+     */
+    suspend fun requestPasswordReset(role: String, username: String): String {
+        val data = api.call(
+            action = "forgotPassword",
+            payload = buildJsonObject {
+                put("role", role)
+                put("username", username)
+            }
+        )
+        return api.json.decodeFromJsonElement(MessageOnly.serializer(), data).message
+    }
+
+    /** Step 2: trade the code for a new password. The person then signs in normally. */
+    suspend fun resetPassword(role: String, username: String, code: String, newPassword: String) {
+        api.call(
+            action = "resetPassword",
+            payload = buildJsonObject {
+                put("role", role)
+                put("username", username)
+                put("code", code)
+                put("newPassword", newPassword)
+            }
+        )
+    }
+
     suspend fun signOut() = store.clearAll()
 
     /* -------------------------------- student ------------------------------- */
