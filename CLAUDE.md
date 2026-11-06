@@ -135,7 +135,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   `apps-script/`; permanent signing + tagged GitHub Releases; this file.
 - **2026-11-06** — Fixed Students header (A1 had been renamed, which broke
   every login) and added warning protection on the Students/Admins header rows.
-  New-score notifications: portal `student.updates` + cached class snapshots +
+  New-score notifications (portal deployment version 13): `student.updates` + cached class snapshots +
   "New" badges on the student pages; app 1.2.0 checks every 2 h and posts a
   phone notification. First app release will be `v1.2.0` (1.1.0 was never
   released).
