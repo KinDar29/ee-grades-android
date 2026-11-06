@@ -86,6 +86,9 @@ function route_(action, p, token) {
     case 'student.home':
       return studentHome_(requireSession_(token));
 
+    case 'student.updates':
+      return studentUpdates_(requireSession_(token));
+
     case 'student.class':
       return studentClass_(requireSession_(token), p.sectionId);
 
@@ -287,6 +290,49 @@ function studentClass_(session, sectionId) {
     showRunningGrade: bool_(s['SHOW_RUNNING_GRADE']),
     showClassAverage: bool_(s['SHOW_CLASS_AVERAGE'])
   };
+}
+
+/**
+ * Every published score this student has, across their active classes, in one
+ * small list. The web portal and the Android app compare it with what they
+ * showed last time to spot new or changed scores. Nothing is stored here
+ * about what a student has seen, so a direct edit in the sheet counts too.
+ */
+function studentUpdates_(session) {
+  if (session.role !== 'student') throw new Error('AUTH:Please sign in as a student.');
+  var subjects = indexBy_(listSubjects_(), 'id');
+  var semById = indexBy_(listSemesters_(), 'id');
+  var byId = {};
+  readTable_(tab_(TAB.SECTIONS)).rows.forEach(function (r) { byId[str_(r['Section ID'])] = r; });
+
+  var me = String(session.id).toLowerCase();
+  var classes = [], scores = [], failed = 0, done = {};
+  enrollmentsForStudent_(session.id).forEach(function (en) {
+    if (done[en.sectionId]) return;
+    done[en.sectionId] = true;
+    var r = byId[en.sectionId];
+    if (!r) return;
+    var status = str_(r['Status']).toLowerCase();
+    if (status === 'deleted' || status === 'archived') return;
+
+    var sec = sectionRowToObject_(r, subjects, semById);
+    var snap;
+    try {
+      snap = sectionSnapshot_(sec.id);
+    } catch (err) {
+      failed++;
+      console.warn('student.updates ' + sec.id + ': ' + err);
+      return;
+    }
+    classes.push({ id: sec.id, subjectCode: sec.subjectCode, subjectTitle: sec.subjectTitle, name: sec.name });
+    var mine = snap.scores[me] || {};
+    snap.items.forEach(function (a) {
+      if (!mine.hasOwnProperty(a.id)) return;
+      scores.push({ sectionId: sec.id, id: a.id, name: a.name, score: mine[a.id], max: a.max });
+    });
+  });
+
+  return { classes: classes, scores: scores, failed: failed, checkedAt: nowStamp_() };
 }
 
 /* --------------------------------- admin --------------------------------- */

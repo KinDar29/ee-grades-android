@@ -134,6 +134,46 @@ data class TokenOnly(
     val token: String = ""
 )
 
+/* ------------------------------ new scores ------------------------------ */
+
+/** Reply to "student.updates": every published score the student has. */
+@Serializable
+data class ScoreUpdates(
+    val classes: List<UpdateClass> = emptyList(),
+    val scores: List<ScoreEntry> = emptyList(),
+    val failed: Int = 0
+)
+
+@Serializable
+data class UpdateClass(
+    val id: String = "",
+    val subjectCode: String = "",
+    val subjectTitle: String = "",
+    val name: String = ""
+) {
+    /** "EE 124" if there is a code, else the title, else the section name. */
+    val label: String
+        get() = subjectCode.ifBlank { subjectTitle.ifBlank { name } }
+}
+
+@Serializable
+data class ScoreEntry(
+    val sectionId: String = "",
+    val id: String = "",
+    val name: String = "",
+    val score: Double = 0.0,
+    val max: Double = 100.0
+)
+
+/** One score the student has not been told about yet. */
+data class NewScore(
+    val sectionId: String,
+    val classLabel: String,
+    val name: String,
+    val score: Double,
+    val max: Double
+)
+
 /** Reply to "forgotPassword": a message that never says whether the account exists. */
 @Serializable
 data class MessageOnly(

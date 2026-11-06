@@ -447,6 +447,74 @@ function promptPasswordChange(forced) {
   });
 }
 
+/* ============================== NEW SCORES ================================= */
+/*  The browser remembers which scores it has shown this student, per device.
+    { init: true, k: { "<sectionId>|<assessmentId>": score } }
+    The first check only records a baseline, so nobody is greeted with every
+    score they already have marked as new.                                    */
+
+function seenKey() { return 'ee.seen.' + ((S.profile && S.profile.id) || '').toLowerCase(); }
+function seenLoad() {
+  try { var v = JSON.parse(localStorage.getItem(seenKey()) || 'null'); if (v && v.k) return v; } catch (e) {}
+  return { init: false, k: {} };
+}
+function seenSave(v) {
+  try { localStorage.setItem(seenKey(), JSON.stringify(v)); } catch (e) { /* private browsing */ }
+}
+function scoreKey(sectionId, itemId) { return String(sectionId) + '|' + String(itemId); }
+function isNewScore(seen, sectionId, itemId, score) {
+  if (!seen.init || score === null || score === undefined) return false;
+  var k = scoreKey(sectionId, itemId);
+  return !seen.k.hasOwnProperty(k) || Number(seen.k[k]) !== Number(score);
+}
+
+function checkScoreUpdates() {
+  call('student.updates', {}).then(function (u) {
+    var seen = seenLoad();
+    if (!seen.init) {
+      var base = { init: true, k: {} };
+      (u.scores || []).forEach(function (s) { base.k[scoreKey(s.sectionId, s.id)] = s.score; });
+      seenSave(base);
+      S.updates = { bySection: {}, total: 0 };
+    } else {
+      var by = {}, total = 0;
+      (u.scores || []).forEach(function (s) {
+        if (isNewScore(seen, s.sectionId, s.id, s.score)) { by[s.sectionId] = (by[s.sectionId] || 0) + 1; total++; }
+      });
+      S.updates = { bySection: by, total: total };
+    }
+    applyUpdateBadges();
+  }).catch(function () { /* badges are a nicety; never break the page */ });
+}
+
+function applyUpdateBadges() {
+  var u = S.updates;
+  var root = $('#content');
+  if (!u || !root || !root.querySelector('.card-grid')) return;
+  $$('.class-card[data-open]', root).forEach(function (card) {
+    var n = u.bySection[card.dataset.open] || 0;
+    var old = card.querySelector('.badge.new');
+    if (old) old.remove();
+    if (n) {
+      var b = document.createElement('span');
+      b.className = 'badge new';
+      b.textContent = n === 1 ? '1 new score' : n + ' new scores';
+      card.appendChild(b);
+    }
+  });
+  var note = $('#newScoresNote', root);
+  if (note) note.remove();
+  if (u.total) {
+    var div = document.createElement('div');
+    div.id = 'newScoresNote';
+    div.className = 'alert ok';
+    div.innerHTML = '<span class="ic">★</span><div>' +
+      (u.total === 1 ? 'You have 1 new score' : 'You have ' + u.total + ' new scores') +
+      ' since you last looked. Open a class to see it.</div>';
+    root.insertBefore(div, root.firstChild);
+  }
+}
+
 /* ============================== STUDENT VIEWS ============================= */
 
 function renderStudentHome() {
@@ -454,6 +522,7 @@ function renderStudentHome() {
   call('student.home', {}).then(function (data) {
     S.student = data;
     drawStudentHome();
+    checkScoreUpdates();
   }).catch(function (err) {
     setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
   });
@@ -505,6 +574,7 @@ function drawStudentHome() {
     }
 
     setContent(html);
+    applyUpdateBadges();
 
     var pick = $('#semPick');
     if (pick) pick.addEventListener('change', function () {
@@ -521,6 +591,7 @@ function renderStudentClass(sectionId) {
   loading('Opening your class record…');
   call('student.class', { sectionId: sectionId }).then(function (d) {
     var sec = d.section;
+    var seen = seenLoad();
     var g = d.grade || {};
     var pct = g.percent === null || g.percent === undefined ? null : g.percent;
 
@@ -585,6 +656,7 @@ function renderStudentClass(sectionId) {
           var pending = it.score === null;
           return '<tr>' +
             '<td><b>' + esc(it.name) + '</b>' +
+              (isNewScore(seen, sec.id, it.id, it.score) ? ' <span class="badge new">New</span>' : '') +
               '<div class="tiny muted hide-lg">' + esc(it.type) +
               (it.weight ? ' · ' + fmt(it.weight, 0) + '%' : '') + '</div></td>' +
             '<td class="hide-sm"><span class="badge">' + esc(it.type) + '</span></td>' +
@@ -609,6 +681,18 @@ function renderStudentClass(sectionId) {
 
     setContent(html);
     $('#backHome').addEventListener('click', renderStudentHome);
+
+    // Everything on this screen has now been seen.
+    if (seen.init) {
+      d.items.forEach(function (it) {
+        if (it.score !== null && it.score !== undefined) seen.k[scoreKey(sec.id, it.id)] = it.score;
+      });
+      seenSave(seen);
+      if (S.updates && S.updates.bySection[sec.id]) {
+        S.updates.total -= S.updates.bySection[sec.id];
+        delete S.updates.bySection[sec.id];
+      }
+    }
   }).catch(function (err) {
     setContent('<button class="btn ghost sm" id="backHome" style="margin-bottom:14px">← All classes</button>' +
       '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');

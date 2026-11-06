@@ -321,6 +321,54 @@ function readSectionData_(sectionId, readOnly) {
   return { section: opened.record, ss: ss, assessments: assessments, roster: roster };
 }
 
+/* ---------------------------- score snapshots ----------------------------- */
+/*  A compact copy of one class's published scores, shared by every student's
+    "what's new" check and kept in CacheService for SNAPSHOT_SECONDS. Saving
+    scores or changing requirements through the portal clears it at once;
+    scores typed straight into the sheet show up within that time.           */
+
+var SNAPSHOT_SECONDS = 600;
+
+function snapshotKey_(sectionId) {
+  return 'snap:' + String(sectionId);
+}
+
+function sectionSnapshot_(sectionId) {
+  var cache = CacheService.getScriptCache();
+  var key = snapshotKey_(sectionId);
+  var hit = cache.get(key);
+  if (hit) {
+    try { return JSON.parse(hit); } catch (err) { /* rebuild below */ }
+  }
+
+  var data = readSectionData_(sectionId, true);
+  var items = data.assessments
+    .filter(function (a) { return a.published; })
+    .map(function (a) { return { id: a.id, name: a.name, max: a.max }; });
+
+  var scores = {};
+  data.roster.forEach(function (s) {
+    var row = {};
+    var any = false;
+    items.forEach(function (a) {
+      var v = s.scores[a.id];
+      if (v !== null && v !== undefined && !isNaN(v)) { row[a.id] = Number(v); any = true; }
+    });
+    if (any) scores[s.studentId.toLowerCase()] = row;
+  });
+
+  var snap = { items: items, scores: scores };
+  var text = JSON.stringify(snap);
+  if (text.length < 90000) {
+    try { cache.put(key, text, SNAPSHOT_SECONDS); } catch (err) { /* too big or cache busy */ }
+  }
+  return snap;
+}
+
+function clearSectionSnapshot_(sectionId) {
+  try { CacheService.getScriptCache().remove(snapshotKey_(sectionId)); } catch (err) { /* ignore */ }
+}
+
 /** Per-assessment class statistics. */
 function assessmentStats_(assessments, roster) {
   var stats = {};
@@ -459,6 +507,7 @@ function saveScores_(session, sectionId, changes) {
     });
 
     range.setValues(block);
+    clearSectionSnapshot_(sectionId);
     logAction_(session.id, session.role, 'SCORES_SAVE', sectionId, { count: saved });
     return { saved: saved, problems: problems };
   });
@@ -498,6 +547,7 @@ function createAssessment_(session, sectionId, data) {
       'Column': colLetter_(col),
       'Notes': str_(data.notes)
     });
+    clearSectionSnapshot_(sectionId);
     logAction_(session.id, session.role, 'ASSESSMENT_CREATE', sectionId, name);
     return { id: id, column: colLetter_(col) };
   });
@@ -526,6 +576,7 @@ function updateAssessment_(session, sectionId, data) {
       if (ci) ss.getSheetByName(STAB.GRADES).getRange(1, ci).setValue(str_(data.name));
     }
     updateObject_(asSheet, row._row, patch);
+    clearSectionSnapshot_(sectionId);
     logAction_(session.id, session.role, 'ASSESSMENT_UPDATE', sectionId, patch);
     return { ok: true };
   });
@@ -544,6 +595,7 @@ function deleteAssessment_(session, sectionId, data) {
     if (ci > GRADES_FIXED.length) ss.getSheetByName(STAB.GRADES).deleteColumn(ci);
     asSheet.deleteRow(row._row);
     syncAssessments_(ss);
+    clearSectionSnapshot_(sectionId);
     logAction_(session.id, session.role, 'ASSESSMENT_DELETE', sectionId, str_(row['Name']));
     return { ok: true };
   });
@@ -591,6 +643,7 @@ function enrollStudents_(session, sectionId, studentIds) {
       grades.getRange(start, 1, added.length, GRADES_FIXED.length).setValues(added);
     }
     rebuildRoster_(sectionId);
+    clearSectionSnapshot_(sectionId);
     logAction_(session.id, session.role, 'ENROLL', sectionId,
       { added: added.length, missing: missing });
     return { added: added.length, missing: missing };
@@ -609,6 +662,7 @@ function unenrollStudent_(session, sectionId, studentId) {
       if (str_(ids[i][0]).toLowerCase() === needle) {
         grades.deleteRow(i + 2);
         rebuildRoster_(sectionId);
+        clearSectionSnapshot_(sectionId);
         logAction_(session.id, session.role, 'UNENROLL', sectionId, studentId);
         return { removed: 1 };
       }

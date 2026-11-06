@@ -1,6 +1,8 @@
 package ph.edu.mmsu.ee.grades.data
 
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -123,13 +125,87 @@ class Repository(
     suspend fun cachedStudentClass(sectionId: String): Cached<StudentClass>? =
         readCache(keyStudentClass(sectionId), StudentClass.serializer())
 
-    suspend fun studentClass(sectionId: String): Cached<StudentClass> =
-        fetch(
+    suspend fun studentClass(sectionId: String): Cached<StudentClass> {
+        val result = fetch(
             action = "student.class",
             payload = buildJsonObject { put("sectionId", sectionId) },
             cacheKey = keyStudentClass(sectionId),
             serializer = StudentClass.serializer()
         )
+        // The student is looking at these scores now, so don't notify about them later.
+        loadBaseline()?.let { base ->
+            result.value.items.forEach { item ->
+                item.score?.let { base[scoreKey(sectionId, item.id)] = it }
+            }
+            saveBaseline(base)
+        }
+        return result
+    }
+
+    /* ------------------------------ new scores ------------------------------ */
+    /*  The phone remembers every score it has already told the student about
+        ("<sectionId>|<assessmentId>" -> score). The first check after sign-in
+        only records that baseline, so nobody gets a notification for scores
+        they already had.                                                      */
+
+    private val baselineSerializer = MapSerializer(String.serializer(), Double.serializer())
+
+    private suspend fun loadBaseline(): MutableMap<String, Double>? {
+        val (_, text) = store.getCache(KEY_SCORE_BASELINE) ?: return null
+        return try {
+            api.json.decodeFromString(baselineSerializer, text).toMutableMap()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private suspend fun saveBaseline(map: Map<String, Double>) {
+        store.putCache(KEY_SCORE_BASELINE, api.json.encodeToString(baselineSerializer, map))
+    }
+
+    /**
+     * Asks the portal for the student's scores and returns the ones that are
+     * new or changed since the last check. Updates the baseline either way.
+     */
+    suspend fun findNewScores(): List<NewScore> {
+        val data = api.call("student.updates", token = requireToken())
+        val updates = api.json.decodeFromJsonElement(ScoreUpdates.serializer(), data)
+        val before = loadBaseline()
+
+        // Keep what we knew about classes the server could not read this time,
+        // so they don't all look "new" once it can again.
+        val reported = updates.classes.map { it.id }.toSet()
+        val next = mutableMapOf<String, Double>()
+        before?.forEach { (key, value) ->
+            if (key.substringBefore('|') !in reported) next[key] = value
+        }
+        updates.scores.forEach { next[scoreKey(it.sectionId, it.id)] = it.score }
+        saveBaseline(next)
+
+        if (before == null) return emptyList()
+        val labels = updates.classes.associate { it.id to it.label }
+        return updates.scores
+            .filter { before[scoreKey(it.sectionId, it.id)] != it.score }
+            .map { NewScore(it.sectionId, labels[it.sectionId].orEmpty(), it.name, it.score, it.max) }
+    }
+
+    /** Records the starting point right after sign-in. Never throws. */
+    suspend fun ensureScoreBaseline() {
+        if (loadBaseline() != null) return
+        try {
+            findNewScores()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The background check will set it up later.
+        }
+    }
+
+    suspend fun askedForNotifications(): Boolean = store.getCache(KEY_ASKED_NOTIFICATIONS) != null
+
+    suspend fun markAskedForNotifications() = store.putCache(KEY_ASKED_NOTIFICATIONS, "1")
+
+    private fun scoreKey(sectionId: String, itemId: String) = "$sectionId|$itemId"
 
     /* --------------------------------- admin -------------------------------- */
 
@@ -181,6 +257,8 @@ class Repository(
     private companion object {
         const val KEY_PROFILE = "profile"
         const val KEY_STUDENT_HOME = "student.home"
+        const val KEY_SCORE_BASELINE = "scores.notified"
+        const val KEY_ASKED_NOTIFICATIONS = "notifications.asked"
         fun keyStudentClass(id: String) = "student.class:$id"
         fun keyAdminHome(id: String) = "admin.home:$id"
         fun keyAdminSection(id: String) = "admin.section:$id"

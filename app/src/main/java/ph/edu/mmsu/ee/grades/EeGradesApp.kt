@@ -5,11 +5,15 @@ import android.content.Context
 import ph.edu.mmsu.ee.grades.data.ApiClient
 import ph.edu.mmsu.ee.grades.data.Repository
 import ph.edu.mmsu.ee.grades.data.Store
+import ph.edu.mmsu.ee.grades.notify.ScoreCheckWorker
+import ph.edu.mmsu.ee.grades.notify.ScoreNotifier
 
 class EeGradesApp : Application() {
     override fun onCreate() {
         super.onCreate()
         ServiceLocator.init(this)
+        ScoreNotifier.ensureChannel(this)
+        ScoreCheckWorker.schedule(this)
     }
 }
 

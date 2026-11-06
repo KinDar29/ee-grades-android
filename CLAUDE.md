@@ -44,6 +44,13 @@ change log at the bottom for every change you ship.
   enrollment index.
 - `Sections.js` — per-section spreadsheets (Info / Grades / Assessments /
   Summary), assessment syncing, grade computation (`computeGrade_`).
+- New-score notifications: `student.updates` (`studentUpdates_` in `Api.js`)
+  returns every published score a student has; `sectionSnapshot_` in
+  `Sections.js` caches each class's scores for 10 min and is cleared whenever
+  scores or requirements change through the portal. The server keeps no "seen"
+  state — the browser (localStorage `ee.seen.<id>`) and the app (DataStore
+  `scores.notified`) compare against what they showed last. First check only
+  records a baseline.
 - `Export.js` — printable PDF class record. `Setup.js` — `setUp()`,
   `installTriggers()`. `Triggers.js` — hourly `scheduledRosterSync`.
 - `Utils.js` — sheet helpers, `withLock_` (re-entrant script lock), settings,
@@ -71,6 +78,14 @@ Rules that matter:
    (`files[].name/type/source`).
 5. If a change needs a new Google permission (e.g. MailApp), the owner must run
    any function once in the editor and approve, or the web app fails.
+
+## Android app notes
+
+- `notify/ScoreCheckWorker` runs every 2 h (WorkManager, needs network) for a
+  signed-in student, calls `Repository.findNewScores()` and posts one
+  notification via `notify/ScoreNotifier` (lock screen shows no details).
+  Opening a class marks its scores as seen. Students are asked once for the
+  Android 13+ notification permission (`NewScoreNotificationsSetup` in AppRoot).
 
 ## Releasing the Android app
 
@@ -116,5 +131,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   mobile admin tokens 8 h; locked roster rebuilds; same error for unknown account
   and wrong password; removed `ALLOWALL`; `resetSharedPasswords()`; student
   e-mail column and automatic password e-mails; forgot password (6-digit e-mailed
-  code). App 1.1.0: forgot-password screen. Repo: portal code mirrored in
+  code). App: forgot-password screen. Repo: portal code mirrored in
   `apps-script/`; permanent signing + tagged GitHub Releases; this file.
+- **2026-11-06** — Fixed Students header (A1 had been renamed, which broke
+  every login) and added warning protection on the Students/Admins header rows.
+  New-score notifications: portal `student.updates` + cached class snapshots +
+  "New" badges on the student pages; app 1.2.0 checks every 2 h and posts a
+  phone notification. First app release will be `v1.2.0` (1.1.0 was never
+  released).

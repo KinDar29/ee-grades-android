@@ -13,8 +13,8 @@ android {
         applicationId = "ph.edu.mmsu.ee.grades"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         // ---------------------------------------------------------------
         // The only line you must edit before the app will talk to anything.
@@ -102,4 +102,5 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.androidx.work.runtime.ktx)
 }
