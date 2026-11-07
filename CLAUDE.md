@@ -156,8 +156,9 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   versionName without a Release (tag pushes are blocked from Claude sessions).
   Merged PR #1. v1.2.0 is NOT released yet: the release run stops until the
   three signing secrets are added to the repo (see "Releasing").
-- **2026-11-07** — Summary of Grades (admin): one per semester covering every
-  subject, generated with every class record export, from the VPAA-TEMP-004
+- **2026-11-07** — Portal deployment version 14. Summary of Grades (admin):
+  one per semester covering every subject (`makeSummaryOfGrades()` builds it
+  from the editor too), generated with every class record export, from the VPAA-TEMP-004
   template; INC/Dropped per student
   ("Final Status" tab); 4.00 now shows as CONDITIONAL (was FAILED) in the class
   record, which also gained Conditional/INC/Dropped counts.
