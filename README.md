@@ -88,11 +88,11 @@ Requires JDK 17 and the Android SDK (compileSdk 35). Android Studio supplies bot
 Releases are signed with a permanent key, so new versions install over the old one.
 
 **Publishing a new version:** bump `versionCode` and `versionName` in
-`app/build.gradle.kts`, merge to `main`, then push a tag `v<versionName>`
-(for example `git tag v1.2.0 && git push origin v1.2.0`). The workflow builds the
-signed APK and publishes the GitHub Release. It needs three repository secrets —
-`EE_KEYSTORE_BASE64`, `EE_KEYSTORE_PASSWORD`, `EE_KEY_ALIAS` — and never a
-keystore committed to the repo.
+`app/build.gradle.kts` and merge to `main`. The workflow builds the signed APK
+and publishes Release `v<versionName>` automatically (pushing that tag also
+works). It needs three repository secrets — `EE_KEYSTORE_BASE64`,
+`EE_KEYSTORE_PASSWORD`, `EE_KEY_ALIAS` — and never a keystore committed to the
+repo.
 
 **Test builds** from ordinary pushes (the `ee-grades-debug-apk` artifact) use the
 app ID `ph.edu.mmsu.ee.grades.debug`, so they install next to the real app.
