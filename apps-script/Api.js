@@ -135,6 +135,11 @@ function route_(action, p, token) {
       return saveScores_(requireSession_(token, 'admin'), p.sectionId, p.changes || []);
     case 'admin.summary.rebuild':
       return rebuildSummary_(requireSession_(token, 'admin'), p.sectionId);
+    case 'admin.indirect':
+      return indirectDashboard_(requireSession_(token, 'admin'), p.semesterId);
+    case 'admin.indirect.refresh':
+      return refreshIndirect_(requireSession_(token, 'admin'), p.semesterId);
+
     case 'admin.export.pdf':
       return exportClassRecordPdf_(requireSession_(token, 'admin'), p);
     case 'admin.section.status':
@@ -213,6 +218,7 @@ function studentHome_(session) {
     var obj = sectionRowToObject_(r, subjects, semById);
     delete obj.spreadsheetId;
     delete obj.spreadsheetUrl;
+    delete obj.workbookId;
     classes.push(obj);
     usedSemesters[obj.semesterId] = true;
   });
@@ -283,6 +289,7 @@ function studentClass_(session, sectionId) {
       units: section.units, semesterName: section.semesterName,
       instructor: section.instructor, schedule: section.schedule, room: section.room
     },
+    survey: surveyForStudent_(section, session.id),
     items: items,
     classSize: data.roster.length,
     grade: bool_(s['SHOW_RUNNING_GRADE']) ? grade : {

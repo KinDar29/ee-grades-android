@@ -55,7 +55,7 @@ function tab_(name) {
   var ss = master_();
   var sh = ss.getSheetByName(name);
   if (!sh) sh = createTab_(ss, name, SCHEMA[name] || []);
-  else if (!_schemaChecked[name] && name === TAB.STUDENTS) ensureColumns_(sh, SCHEMA[name]);
+  else if (!_schemaChecked[name] && (name === TAB.STUDENTS || name === TAB.SECTIONS)) ensureColumns_(sh, SCHEMA[name]);
   _schemaChecked[name] = true;
   return sh;
 }
