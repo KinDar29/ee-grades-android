@@ -35,7 +35,7 @@ function classRecordData_(sectionId) {
   });
 
   // Rank by percentage, highest first. Equal percentages share a rank.
-  var ranked = rows.filter(function (x) { return x.grade.percent !== null; })
+  var ranked = rows.filter(function (x) { return x.grade.percent !== null && !x.student.finalStatus; })
                    .sort(function (a, b) { return b.grade.percent - a.grade.percent; });
   var rankOf = {};
   var lastPercent = null, lastRank = 0;
@@ -51,10 +51,14 @@ function classRecordData_(sectionId) {
   rows.forEach(function (x) { x.rank = rankOf[x.student.studentId] || null; });
 
   var percents = ranked.map(function (x) { return x.grade.percent; });
-  var passed = 0, failed = 0;
+  var passed = 0, failed = 0, conditional = 0, inc = 0, dropped = 0;
   rows.forEach(function (x) {
-    if (x.grade.percent === null) return;
-    if (isFailing_(x.grade)) failed++; else passed++;
+    var s = standingOf_(x.grade, x.student.finalStatus);
+    if (s === 'PASSED') passed++;
+    else if (s === 'FAILED') failed++;
+    else if (s === 'CONDITIONAL') conditional++;
+    else if (s === 'INC') inc++;
+    else if (s === 'DROPPED') dropped++;
   });
 
   return {
@@ -69,16 +73,33 @@ function classRecordData_(sectionId) {
       highest: percents.length ? Math.max.apply(null, percents) : null,
       lowest: percents.length ? Math.min.apply(null, percents) : null,
       passed: passed,
-      failed: failed
+      failed: failed,
+      conditional: conditional,
+      inc: inc,
+      dropped: dropped
     }
   };
 }
 
-/** Driven by your own GradeScale tab, so it follows whatever bands you set. */
+/** Driven by your own GradeScale tab, so it follows whatever bands you set.
+    A 4.00 "Conditional" is not failing — see standingOf_ in Sections.js. */
 function isFailing_(grade) {
   if (grade.percent === null) return false;
   if (/fail/i.test(str_(grade.remark))) return true;
+  if (isConditional_(grade)) return false;
   return grade.grade !== null && grade.grade > 3.0;
+}
+
+/** The STANDING column of the class record. */
+function standingLabel_(grade, finalStatus) {
+  switch (standingOf_(grade, finalStatus)) {
+    case 'DROPPED': return 'DROPPED';
+    case 'INC': return 'INC';
+    case 'NONE': return 'No scores yet';
+    case 'CONDITIONAL': return 'CONDITIONAL';
+    case 'FAILED': return 'FAILED';
+    default: return str_(grade.remark) || 'PASSED';
+  }
 }
 
 /* ---------------------------- the printable tab -------------------------- */
@@ -140,7 +161,7 @@ function buildClassRecordSheet_(sectionId) {
     line.push(g.earned === null ? '' : g.earned);
     line.push(g.percent === null ? '' : g.percent);
     line.push(g.grade === null ? '' : g.grade);
-    line.push(g.percent === null ? 'No scores yet' : (isFailing_(g) ? 'FAILED' : str_(g.remark) || 'PASSED'));
+    line.push(standingLabel_(g, x.student.finalStatus));
     line.push(x.rank === null ? '' : x.rank);
     return line;
   });
@@ -153,7 +174,9 @@ function buildClassRecordSheet_(sectionId) {
     ['With scores recorded', st.graded, 'Highest', st.highest === null ? '—' : fmtNum_(st.highest) + '%'],
     ['Passing', st.passed, 'Lowest', st.lowest === null ? '—' : fmtNum_(st.lowest) + '%'],
     ['Failing', st.failed, 'Grading', asm.some(function (a) { return a.weight > 0; })
-      ? 'Weighted average of recorded requirements' : 'Total points earned over points possible']
+      ? 'Weighted average of recorded requirements' : 'Total points earned over points possible'],
+    ['Conditional (4.00)', st.conditional, 'INC', st.inc],
+    ['Dropped', st.dropped, '', '']
   ];
 
   /* ---- write it ---- */
@@ -233,7 +256,7 @@ function buildClassRecordSheet_(sectionId) {
     }
     // Mark the failing rows.
     d.rows.forEach(function (x, i) {
-      if (isFailing_(x.grade)) {
+      if (standingOf_(x.grade, x.student.finalStatus) === 'FAILED') {
         sheet.getRange(rBody + i, tailStart + 3).setFontColor('#b42318').setFontWeight('bold');
       }
     });
@@ -363,7 +386,20 @@ function exportClassRecordPdf_(session, data) {
     logAction_(session.id, session.role, 'EXPORT_PDF', data.sectionId,
       { file: name, students: built.students });
 
+    // The faculty member's Summary of Grades goes out with every class record.
+    // A problem with it must never cost the admin the PDF.
+    var summary = null;
+    try {
+      summary = buildSummaryOfGrades_(data.sectionId);
+      logAction_(session.id, session.role, 'SUMMARY_OF_GRADES', data.sectionId,
+        { file: summary.name, rows: summary.rows.length });
+    } catch (err) {
+      console.warn('Summary of Grades: ' + (err && err.stack || err));
+      summary = { error: err && err.message ? err.message : String(err) };
+    }
+
     return {
+      summary: summary,
       name: name + '.pdf',
       students: built.students,
       base64: Utilities.base64Encode(blob.getBytes()),

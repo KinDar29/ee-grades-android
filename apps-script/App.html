@@ -927,7 +927,8 @@ function drawGradebook() {
           '<div class="asm-sub">/' + fmtScore(a.max) + (a.weight ? ' · ' + fmt(a.weight, 0) + '%' : '') + '</div>' +
         '</th>';
       }).join('') +
-      '<th class="num">%</th><th class="num">Grade</th><th></th>' +
+      '<th class="num">%</th><th class="num">Grade</th>' +
+      '<th title="INC and Dropped are set here; everything else comes from the grade">Status</th><th></th>' +
       '</tr></thead><tbody>' +
       d.students.map(function (s) {
         return '<tr data-sid="' + esc(s.studentId) + '">' +
@@ -941,6 +942,11 @@ function drawGradebook() {
           }).join('') +
           '<td class="num total">' + (s.grade.percent === null ? '—' : fmt(s.grade.percent, 1)) + '</td>' +
           '<td class="num total">' + (s.grade.grade === null ? '—' : fmt(s.grade.grade, 2)) + '</td>' +
+          '<td><select class="fs" data-fs="' + esc(s.studentId) + '" style="width:auto;min-width:104px;padding:4px 6px">' +
+            '<option value=""' + (s.finalStatus ? '' : ' selected') + '>By grade</option>' +
+            '<option value="INC"' + (s.finalStatus === 'INC' ? ' selected' : '') + '>INC</option>' +
+            '<option value="Dropped"' + (s.finalStatus === 'Dropped' ? ' selected' : '') + '>Dropped</option>' +
+          '</select></td>' +
           '<td class="right"><button class="btn ghost sm" data-drop="' + esc(s.studentId) + '" title="Remove from class">✕</button></td>' +
         '</tr>';
       }).join('') +
@@ -956,6 +962,35 @@ function drawGradebook() {
   bindGradebook();
 }
 
+/** The Summary of Grades part of the "Class record ready" dialog. */
+function summaryOfGradesHtml(sog) {
+  if (!sog) return '';
+  var html = '<div style="border-top:1px solid var(--border);margin-top:18px;padding-top:16px">' +
+    '<h4 style="margin:0 0 6px">Summary of Grades</h4>';
+  if (sog.error) {
+    return html + '<div class="alert warn"><span class="ic">!</span><div>The Summary of Grades could not be ' +
+      'made: ' + esc(sog.error) + '</div></div></div>';
+  }
+  var rows = sog.rows || [];
+  html += '<p class="small" style="margin-bottom:10px">' + esc(sog.faculty) + ' · ' + esc(sog.semester) + ' · ' +
+    rows.length + (rows.length === 1 ? ' row' : ' rows') + ' (every class this faculty handles this semester).</p>' +
+    '<div class="table-wrap" style="margin-bottom:12px"><table><thead><tr>' +
+    '<th>Subject</th><th>Course</th><th class="num">Yr</th><th class="num">Total</th><th class="num">Passed</th>' +
+    '<th class="num">Drop</th><th class="num">INC</th><th class="num">4</th><th class="num">Failed</th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr><td>' + esc(r.subject) + (r.remarks ? '<div class="tiny muted">' + esc(r.remarks) + '</div>' : '') +
+        '</td><td>' + esc(r.course) + '</td><td class="num">' + esc(r.year) + '</td>' +
+        '<td class="num">' + r.total + '</td><td class="num">' + r.passed + '</td><td class="num">' + r.dropped +
+        '</td><td class="num">' + r.inc + '</td><td class="num">' + r.four + '</td><td class="num">' + r.failed + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<div class="stack" style="gap:10px">' +
+      '<button class="btn primary block" id="sogDl">⬇ Download the Summary of Grades (Word)</button>' +
+      (sog.driveUrl ? '<a class="btn block" target="_blank" rel="noopener" href="' + esc(sog.driveUrl) +
+        '">Open it in Drive ↗</a>' : '') +
+    '</div><div id="sogMsg"></div></div>';
+  return html;
+}
+
 function bindGradebook() {
   var d = S.gb;
   $('#backCls').addEventListener('click', function () { S.section = null; S.gb = null; renderAdmin(); });
@@ -967,12 +1002,12 @@ function bindGradebook() {
   if (aa) aa.addEventListener('click', function () { assessmentModal(null); });
 
   /* --- turn the base64 the server sends back into a real file download --- */
-  function saveBase64(b64, filename) {
+  function saveBase64(b64, filename, mime) {
     try {
       var bin = atob(b64);
       var bytes = new Uint8Array(bin.length);
       for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      var blob = new Blob([bytes], { type: 'application/pdf' });
+      var blob = new Blob([bytes], { type: mime || 'application/pdf' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
@@ -987,10 +1022,32 @@ function bindGradebook() {
     }
   }
 
+  /* --- INC / Dropped per student (saved straight away) --- */
+  $$('select.fs').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      var el = this;
+      var sid = el.dataset.fs;
+      var student = d.students.filter(function (s) { return s.studentId === sid; })[0];
+      var before = student ? student.finalStatus || '' : '';
+      el.disabled = true;
+      call('admin.section.status', { sectionId: d.section.id, studentId: sid, status: el.value })
+        .then(function (res) {
+          el.disabled = false;
+          if (student) student.finalStatus = res.status;
+          toast(res.status ? sid + ' marked ' + res.status + '.' : sid + ' is back to "by grade".');
+        })
+        .catch(function (err) {
+          el.disabled = false;
+          el.value = before;
+          toast(err.message, 'error');
+        });
+    });
+  });
+
   var exportBtn = $('#gbExport');
   if (exportBtn) exportBtn.addEventListener('click', function () {
     var btn = this;
-    busy(btn, true, 'Building…');
+    busy(btn, true, 'Building… (about a minute)');
     call('admin.export.pdf', { sectionId: d.section.id })
       .then(function (res) {
         busy(btn, false);
@@ -1014,9 +1071,20 @@ function bindGradebook() {
             '<p class="tiny faint" style="margin-top:14px">A copy is filed in the ' +
             '<b>Class Records</b> folder of this semester, so you can print it again later ' +
             'without rebuilding it.</p>' +
-            '<div id="pdfMsg"></div>',
+            '<div id="pdfMsg"></div>' +
+            summaryOfGradesHtml(res.summary),
           footer: '<button class="btn" data-close="1">Close</button>',
           onMount: function (root) {
+            var sogBtn = root.querySelector('#sogDl');
+            if (sogBtn) sogBtn.addEventListener('click', function () {
+              var ok = saveBase64(res.summary.base64, res.summary.name,
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+              root.querySelector('#sogMsg').innerHTML = ok
+                ? '<div class="alert ok" style="margin:14px 0 0"><span class="ic">✓</span>' +
+                  '<div>Saved to your downloads.</div></div>'
+                : '<div class="alert warn" style="margin:14px 0 0"><span class="ic">!</span>' +
+                  '<div>Your browser blocked the direct download. Use “Open it in Drive” instead.</div></div>';
+            });
             root.querySelector('#pdfDl').addEventListener('click', function () {
               var ok = saveBase64(res.base64, res.name);
               root.querySelector('#pdfMsg').innerHTML = ok

@@ -292,6 +292,7 @@ function readSectionData_(sectionId, readOnly) {
   var lastRow = grades.getLastRow();
   var lastCol = Math.max(grades.getLastColumn(), fixed);
   var roster = [];
+  var statuses = readFinalStatuses_(ss);
 
   if (lastRow >= 2) {
     var values = grades.getRange(2, 1, lastRow - 1, lastCol).getValues();
@@ -307,7 +308,8 @@ function readSectionData_(sectionId, readOnly) {
         lastName: str_(values[i][1]),
         firstName: str_(values[i][2]),
         row: i + 2,
-        scores: scores
+        scores: scores,
+        finalStatus: statuses[sid.toLowerCase()] || ''
       });
     }
   }
@@ -319,6 +321,73 @@ function readSectionData_(sectionId, readOnly) {
   });
 
   return { section: opened.record, ss: ss, assessments: assessments, roster: roster };
+}
+
+/* ----------------------------- final status ------------------------------ */
+/*  INC and Dropped can't be worked out from scores, so the admin sets them per
+    student. They live in a small "Final Status" tab of the class sheet
+    (Student ID | Status | Updated), created the first time one is set.        */
+
+function readFinalStatuses_(ss) {
+  var out = {};
+  var sh = ss.getSheetByName(STAB.STATUS);
+  if (!sh) return out;
+  readTable_(sh).rows.forEach(function (r) {
+    var sid = str_(r['Student ID']).toLowerCase();
+    var st = normalizeStatus_(r['Status']);
+    if (sid && st) out[sid] = st;
+  });
+  return out;
+}
+
+function normalizeStatus_(v) {
+  var s = str_(v).toLowerCase();
+  if (s === 'inc' || s === 'incomplete') return 'INC';
+  if (s === 'dropped' || s === 'drp' || s === 'drop') return 'Dropped';
+  return '';
+}
+
+function setFinalStatus_(session, sectionId, studentId, status) {
+  var sid = str_(studentId);
+  var st = normalizeStatus_(status);
+  if (!sid) throw new Error('Which student?');
+  if (str_(status) && !st) throw new Error('Status must be INC, Dropped or blank.');
+
+  return withLock_(function () {
+    var ss = openSectionFile_(sectionId).ss;
+    var sh = ss.getSheetByName(STAB.STATUS);
+    if (!sh) {
+      if (!st) return { studentId: sid, status: '' };
+      sh = createTab_(ss, STAB.STATUS, ['Student ID', 'Status', 'Updated']);
+    }
+    var row = findRow_(sh, 'Student ID', sid);
+    if (row && !st) sh.deleteRow(row._row);
+    else if (row) updateObject_(sh, row._row, { 'Status': st, 'Updated': nowStamp_() });
+    else if (st) appendObject_(sh, { 'Student ID': sid, 'Status': st, 'Updated': nowStamp_() });
+    logAction_(session.id, session.role, 'FINAL_STATUS', sectionId, { student: sid, status: st || '(cleared)' });
+    return { studentId: sid, status: st };
+  });
+}
+
+/**
+ * One standing for a student, shared by the class record and the Summary of
+ * Grades: DROPPED, INC, NONE (no scores yet), CONDITIONAL (4.00), FAILED or
+ * PASSED.
+ */
+function standingOf_(grade, finalStatus) {
+  var st = normalizeStatus_(finalStatus);
+  if (st === 'Dropped') return 'DROPPED';
+  if (st === 'INC') return 'INC';
+  if (!grade || grade.percent === null || grade.percent === undefined) return 'NONE';
+  if (isConditional_(grade)) return 'CONDITIONAL';
+  if (isFailing_(grade)) return 'FAILED';
+  return 'PASSED';
+}
+
+function isConditional_(grade) {
+  if (!grade) return false;
+  if (/condition/i.test(str_(grade.remark))) return true;
+  return grade.grade !== null && grade.grade !== undefined && Math.abs(Number(grade.grade) - 4) < 1e-9;
 }
 
 /* ---------------------------- score snapshots ----------------------------- */
