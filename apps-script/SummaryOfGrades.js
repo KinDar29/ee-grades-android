@@ -294,3 +294,21 @@ function buildSummaryOfGrades_(sectionId) {
     rows: d.rows
   };
 }
+
+/**
+ * ▶ Run from the Apps Script editor to (re)build the Summary of Grades for
+ * the active semester without exporting a class record. Logs the Drive link.
+ */
+function makeSummaryOfGrades() {
+  var semesterId = str_(settings_()['ACTIVE_SEMESTER_ID']);
+  var sections = listSections_(semesterId);
+  if (!sections.length) throw new Error('There are no classes in the active semester.');
+  var r = withLock_(function () { return buildSummaryOfGrades_(sections[0].id); });
+  console.log('Summary of Grades: ' + r.semester + ' — ' + r.rows.length + ' row(s)');
+  r.rows.forEach(function (x) {
+    console.log('  ' + [x.faculty, x.subject, x.course, x.year, 'total ' + x.total, 'passed ' + x.passed,
+      'dropped ' + x.dropped, 'INC ' + x.inc, '4: ' + x.four, 'failed ' + x.failed, x.remarks].join(' | '));
+  });
+  console.log('File: ' + (r.driveUrl || '(could not be saved to Drive)'));
+  return r.driveUrl;
+}
