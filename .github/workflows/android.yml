@@ -2,9 +2,12 @@ name: Build APK
 
 # Every push builds a test APK (app ID ph.edu.mmsu.ee.grades.debug), downloadable
 # from the run's Artifacts.
-# Pushing a tag like v1.2.0 builds the real app, signed with the permanent key
-# from the repository secrets, and publishes it as a GitHub Release. The newest
-# release is always at:
+#
+# Releasing: when a push to main carries a versionName that has no GitHub
+# Release yet (bump versionCode + versionName, merge), this builds the real app
+# signed with the permanent key from the repository secrets and publishes it as
+# Release v<versionName>, creating that tag. Pushing a tag v<versionName> does
+# the same. The newest release is always at:
 #   https://github.com/KinDar29/ee-grades-android/releases/latest/download/ee-grades.apk
 
 on:
@@ -32,13 +35,39 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      # Decide whether this run publishes a release or just builds a test APK.
+      - name: Plan
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_KEY: ${{ secrets.EE_KEYSTORE_BASE64 != '' && secrets.EE_KEYSTORE_PASSWORD != '' && secrets.EE_KEY_ALIAS != '' }}
+        run: |
+          ver=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          release=false
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            if [ "${GITHUB_REF_NAME#v}" != "$ver" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match versionName $ver in app/build.gradle.kts"
+              exit 1
+            fi
+            release=true
+          elif [ "$GITHUB_REF" = "refs/heads/main" ] && ! gh release view "v$ver" >/dev/null 2>&1; then
+            release=true
+          fi
+          if [ "$release" = true ] && [ "$HAS_KEY" != true ]; then
+            echo "::error::v$ver can't be released: add EE_KEYSTORE_BASE64, EE_KEYSTORE_PASSWORD and EE_KEY_ALIAS under Settings > Secrets and variables > Actions, then re-run this workflow."
+            exit 1
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "Version $ver, release=$release"
+
       # ---------------------------- test builds ----------------------------
       - name: Build debug APK
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: steps.plan.outputs.release != 'true'
         run: ./gradlew assembleDebug --no-daemon --stacktrace ${{ vars.EE_API_URL && format('-PEE_API_URL={0}', vars.EE_API_URL) || '' }}
 
       - name: Upload debug APK
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        if: steps.plan.outputs.release != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ee-grades-debug-apk
@@ -47,27 +76,13 @@ jobs:
           retention-days: 30
 
       # ------------------------------ releases ------------------------------
-      - name: Check the tag matches versionName
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-        run: |
-          want="${GITHUB_REF_NAME#v}"
-          have=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
-          if [ "$want" != "$have" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match versionName $have in app/build.gradle.kts"
-            exit 1
-          fi
-
       - name: Build signed release APK
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: steps.plan.outputs.release == 'true'
         env:
           EE_KEYSTORE_BASE64: ${{ secrets.EE_KEYSTORE_BASE64 }}
           EE_KEYSTORE_PASSWORD: ${{ secrets.EE_KEYSTORE_PASSWORD }}
           EE_KEY_ALIAS: ${{ secrets.EE_KEY_ALIAS }}
         run: |
-          if [ -z "$EE_KEYSTORE_BASE64" ] || [ -z "$EE_KEYSTORE_PASSWORD" ] || [ -z "$EE_KEY_ALIAS" ]; then
-            echo "::error::Signing secrets are missing. Add EE_KEYSTORE_BASE64, EE_KEYSTORE_PASSWORD and EE_KEY_ALIAS under Settings > Secrets and variables > Actions."
-            exit 1
-          fi
           echo "$EE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
           export EE_KEYSTORE_PATH="$RUNNER_TEMP/release.jks"
           ./gradlew assembleRelease --no-daemon --stacktrace ${{ vars.EE_API_URL && format('-PEE_API_URL={0}', vars.EE_API_URL) || '' }}
@@ -75,9 +90,11 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/ee-grades.apk"
 
       - name: Publish GitHub Release
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        if: steps.plan.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VER: ${{ steps.plan.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/ee-grades.apk" \
-            --title "EE Grades $GITHUB_REF_NAME" --generate-notes
+          gh release create "v$VER" "$RUNNER_TEMP/ee-grades.apk" \
+            --target "$GITHUB_SHA" \
+            --title "EE Grades v$VER" --generate-notes

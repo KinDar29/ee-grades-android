@@ -91,10 +91,11 @@ Rules that matter:
 
 - Every push builds a **test** APK (artifact `ee-grades-debug-apk`, app ID
   `.debug`, installs next to the real app).
-- To release: bump `versionCode` and `versionName` in `app/build.gradle.kts`,
-  merge to `main`, then push a tag `v<versionName>` (e.g. `v1.2.0`). The
-  workflow checks the tag matches, builds a release APK signed with the
-  permanent key, and publishes a GitHub Release.
+- To release: bump `versionCode` and `versionName` in `app/build.gradle.kts`
+  and merge to `main`. The workflow sees there is no Release `v<versionName>`
+  yet, builds the APK signed with the permanent key, and publishes the Release
+  (creating the tag). Pushing a tag `v<versionName>` also works. Claude's
+  sessions can't push tags (the session proxy blocks it) — merging is the way.
 - Students always download from
   `https://github.com/KinDar29/ee-grades-android/releases/latest/download/ee-grades.apk`
   and updates install over the old app.
@@ -139,3 +140,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   "New" badges on the student pages; app 1.2.0 checks every 2 h and posts a
   phone notification. First app release will be `v1.2.0` (1.1.0 was never
   released).
+- **2026-11-07** — Releases now publish automatically when `main` gets a
+  versionName without a Release (tag pushes are blocked from Claude sessions).
+  Merged PR #1; v1.2.0 released from the merge.
