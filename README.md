@@ -67,9 +67,7 @@ configure:
 If you would rather not have the URL committed, delete the `EE_API_URL` line from
 `gradle.properties` and add it instead as a repository variable: **Settings →
 Secrets and variables → Actions → Variables → New repository variable**, named
-`EE_API_URL`. The workflow already prefers that variable when it exists.
-`workflow_dispatch` also accepts a URL as an input, for building against a test
-deployment without touching either.
+`EE_API_URL`. The workflow prefers that variable when it exists.
 
 ### Building locally instead
 
@@ -85,11 +83,22 @@ Requires JDK 17 and the Android SDK (compileSdk 35). Android Studio supplies bot
 
 ### Installing
 
-The debug APK is signed with the standard debug key, which is fine for testing
-and sideloading but **not** for the Play Store. For a Play release you need a
-release keystore and a `signingConfigs` block; ask and I will add one, along with
-notes for the Data Safety form — grades are personal data and Google asks about
-it specifically.
+**Students:** download the latest app from
+<https://github.com/KinDar29/ee-grades-android/releases/latest/download/ee-grades.apk>.
+Releases are signed with a permanent key, so new versions install over the old one.
+
+**Publishing a new version:** bump `versionCode` and `versionName` in
+`app/build.gradle.kts`, merge to `main`, then push a tag `v<versionName>`
+(for example `git tag v1.2.0 && git push origin v1.2.0`). The workflow builds the
+signed APK and publishes the GitHub Release. It needs three repository secrets —
+`EE_KEYSTORE_BASE64`, `EE_KEYSTORE_PASSWORD`, `EE_KEY_ALIAS` — and never a
+keystore committed to the repo.
+
+**Test builds** from ordinary pushes (the `ee-grades-debug-apk` artifact) use the
+app ID `ph.edu.mmsu.ee.grades.debug`, so they install next to the real app.
+
+For a Play Store listing you would also need the Data Safety form — grades are
+personal data and Google asks about it specifically.
 
 ---
 

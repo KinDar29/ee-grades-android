@@ -1,0 +1,1872 @@
+<script>
+/* =============================================================================
+   Electrical Engineering — Grades Portal · browser application
+   ========================================================================== */
+
+var S = {
+  token: '',
+  profile: null,
+  portal: null,
+  admin: null,
+  tab: 'classes',
+  section: null,
+  dirty: {},
+  studentPage: 1,
+  studentQuery: '',
+  loginRole: 'student'
+};
+
+/* ------------------------------- transport ------------------------------- */
+
+function call(action, payload) {
+  return new Promise(function (resolve, reject) {
+    google.script.run
+      .withSuccessHandler(function (raw) {
+        var parsed;
+        try { parsed = JSON.parse(raw); }
+        catch (e) { reject(new Error('The server sent something unexpected. Please reload the page.')); return; }
+        if (parsed.ok) { resolve(parsed.data); return; }
+        if (parsed.authRequired) { forceSignOut(parsed.error); }
+        if (parsed.mustChangePassword && !document.querySelector('#pwSave')) { promptPasswordChange(true); }
+        reject(new Error(parsed.error || 'Something went wrong.'));
+      })
+      .withFailureHandler(function (err) {
+        reject(new Error((err && err.message) || 'Could not reach the server. Check your connection.'));
+      })
+      .api({ action: action, payload: payload || {}, token: S.token || '' });
+  });
+}
+
+/* -------------------------------- storage -------------------------------- */
+
+function saveToken(t) {
+  S.token = t || '';
+  try { t ? localStorage.setItem('care.token', t) : localStorage.removeItem('care.token'); }
+  catch (e) { /* private browsing */ }
+}
+function loadToken() {
+  try { return localStorage.getItem('care.token') || ''; } catch (e) { return ''; }
+}
+
+/* ------------------------------- utilities ------------------------------- */
+
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function fmt(n, d) {
+  if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
+  return Number(n).toFixed(d === undefined ? 2 : d);
+}
+function fmtScore(n) {
+  if (n === null || n === undefined || n === '' || isNaN(n)) return '—';
+  return (Math.round(Number(n) * 100) / 100).toString();
+}
+function $(sel, root) { return (root || document).querySelector(sel); }
+function $$(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+function toast(message, kind) {
+  var box = document.createElement('div');
+  box.className = 'toast ' + (kind || '');
+  box.textContent = message;
+  $('#toasts').appendChild(box);
+  setTimeout(function () {
+    box.style.transition = 'opacity .25s';
+    box.style.opacity = '0';
+    setTimeout(function () { box.remove(); }, 260);
+  }, kind === 'error' ? 6000 : 3400);
+}
+
+function busy(button, on, label) {
+  if (!button) return;
+  if (on) {
+    button.dataset.label = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner"></span> ' + esc(label || 'Working…');
+  } else {
+    button.disabled = false;
+    if (button.dataset.label) button.innerHTML = button.dataset.label;
+  }
+}
+
+/*
+ * Every view binds its own click handlers to #content. Swapping the node
+ * instead of just its innerHTML throws those handlers away with it — otherwise
+ * they stack up across renders and one click fires the same action twice.
+ */
+function setContent(html) {
+  var old = document.getElementById('content');
+  var fresh = document.createElement('div');
+  fresh.id = 'content';
+  fresh.className = old.className;
+  fresh.innerHTML = html;
+  old.parentNode.replaceChild(fresh, old);
+}
+function loading(text) {
+  setContent('<div class="loading"><span class="spinner"></span> ' + esc(text || 'Loading…') + '</div>');
+}
+function empty(title, note, actionHtml) {
+  return '<div class="empty"><div class="big">◇</div><h4>' + esc(title) + '</h4>' +
+    '<p class="small">' + esc(note || '') + '</p>' + (actionHtml || '') + '</div>';
+}
+
+/* --------------------------------- modal --------------------------------- */
+
+var _modalStack = [];
+
+function openModal(opts) {
+  var back = document.createElement('div');
+  back.className = 'modal-back';
+  back.innerHTML =
+    '<div class="modal' + (opts.wide ? ' wide' : '') + '" role="dialog" aria-modal="true">' +
+      '<header><h3>' + esc(opts.title) + '</h3><div class="spacer"></div>' +
+        (opts.locked ? '' : '<button class="btn ghost icon" data-close="1" aria-label="Close">✕</button>') +
+      '</header>' +
+      '<div class="body">' + (opts.body || '') + '</div>' +
+      (opts.footer === null ? '' : '<footer>' + (opts.footer || '') + '</footer>') +
+    '</div>';
+  $('#modalRoot').appendChild(back);
+  _modalStack.push(back);
+
+  function close() {
+    var i = _modalStack.indexOf(back);
+    if (i > -1) _modalStack.splice(i, 1);
+    back.remove();
+  }
+  back.addEventListener('click', function (e) {
+    if (e.target.closest('[data-close]')) { close(); return; }
+    if (e.target === back && !opts.locked) close();
+  });
+  if (opts.onMount) opts.onMount(back, close);
+  var first = back.querySelector('input, select, textarea');
+  if (first) setTimeout(function () { first.focus(); }, 40);
+  return { root: back, close: close };
+}
+
+function confirmDialog(title, message, confirmLabel, danger) {
+  return new Promise(function (resolve) {
+    var m = openModal({
+      title: title,
+      body: '<p class="small" style="margin:0">' + esc(message) + '</p>',
+      footer: '<button class="btn" data-close="1">Cancel</button>' +
+        '<button class="btn ' + (danger ? 'danger' : 'primary') + '" id="cfmYes">' +
+        esc(confirmLabel || 'Confirm') + '</button>',
+      onMount: function (root, close) {
+        root.querySelector('#cfmYes').addEventListener('click', function () { close(); resolve(true); });
+        root.addEventListener('click', function (e) {
+          if (e.target.closest('[data-close]') || e.target === root) resolve(false);
+        });
+      }
+    });
+    void m;
+  });
+}
+
+/* ================================== BOOT ================================== */
+
+document.addEventListener('DOMContentLoaded', function () {
+  bindShell();
+  S.token = loadToken();
+
+  try {
+    var carried = sessionStorage.getItem('care.msg');
+    if (carried) {
+      sessionStorage.removeItem('care.msg');
+      $('#loginNotice').innerHTML = '<div class="alert warn"><span class="ic">!</span><div>' +
+        esc(carried) + '</div></div>';
+    }
+  } catch (e) { /* storage unavailable */ }
+
+  call('portal', {}).then(function (info) {
+    S.portal = info;
+    applyBranding(info);
+    if (!info.ready) {
+      $('#loginNotice').innerHTML =
+        '<div class="alert warn"><span class="ic">!</span><div>The database has not been created yet. ' +
+        'Open the Apps Script editor and run <b>setUp()</b> once, then reload this page.</div></div>';
+      return;
+    }
+    if (info.contactEmail) {
+      $('#loginHelp').innerHTML = 'Trouble signing in? Contact <a href="mailto:' +
+        esc(info.contactEmail) + '">' + esc(info.contactEmail) + '</a>';
+    }
+    if (S.token) resumeSession();
+  }).catch(function (err) {
+    $('#loginNotice').innerHTML = '<div class="alert error"><span class="ic">!</span><div>' +
+      esc(err.message) + '</div></div>';
+  });
+});
+
+function applyBranding(info) {
+  if (!info) return;
+  if (info.title) { $('#loginTitle').textContent = info.title; $('#barTitle').textContent = info.title; }
+  if (info.subtitle) { $('#loginSubtitle').textContent = info.subtitle; $('#barSubtitle').textContent = info.subtitle; }
+}
+
+function resumeSession() {
+  call('session', {}).then(function (res) {
+    S.profile = res.profile;
+    showApp();
+    if (res.mustChangePassword) promptPasswordChange(true);
+    else route();
+  }).catch(function () {
+    saveToken('');
+  });
+}
+
+function bindShell() {
+  $('#roleSwitch').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-role]');
+    if (!b) return;
+    S.loginRole = b.dataset.role;
+    $$('#roleSwitch button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    var admin = S.loginRole === 'admin';
+    $('#loginUserLabel').textContent = admin ? 'E-mail address' : 'Student number';
+    $('#loginUser').placeholder = admin ? 'you@mmsu.edu.ph' : 'e.g. 21-123456';
+    $('#loginUser').type = admin ? 'email' : 'text';
+  });
+
+  $('#loginForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    doLogin();
+  });
+
+  $('#btnSignOut').addEventListener('click', function () {
+    saveToken('');
+    location.reload();
+  });
+
+  $('#btnAccount').addEventListener('click', function () { promptPasswordChange(false); });
+
+  $('#forgotLink').addEventListener('click', function (e) {
+    e.preventDefault();
+    forgotPasswordModal();
+  });
+
+  $('#adminTabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    S.tab = b.dataset.tab;
+    S.section = null;
+    $$('#adminTabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+    route();
+  });
+}
+
+function showApp() {
+  $('#view-login').classList.add('hidden');
+  $('#view-app').classList.remove('hidden');
+  $('#barName').textContent = S.profile.name;
+  $('#barRole').textContent = S.profile.role === 'admin'
+    ? (S.profile.adminRole || 'Administrator')
+    : ('Student · ' + (S.profile.id || ''));
+  $('#adminTabs').classList.toggle('hidden', S.profile.role !== 'admin');
+}
+
+function forceSignOut(message) {
+  saveToken('');
+  if (message) try { sessionStorage.setItem('care.msg', message); } catch (e) {}
+  setTimeout(function () { location.reload(); }, 400);
+}
+
+function doLogin() {
+  var btn = $('#loginBtn');
+  var user = $('#loginUser').value.trim();
+  var pass = $('#loginPass').value;
+  $('#loginNotice').innerHTML = '';
+  busy(btn, true, 'Signing in…');
+  call('login', { role: S.loginRole, username: user, password: pass })
+    .then(function (res) {
+      saveToken(res.token);
+      S.profile = res.profile;
+      showApp();
+      if (res.mustChangePassword) promptPasswordChange(true);
+      else route();
+    })
+    .catch(function (err) {
+      busy(btn, false);
+      $('#loginNotice').innerHTML = '<div class="alert error"><span class="ic">!</span><div>' +
+        esc(err.message) + '</div></div>';
+      $('#loginPass').value = '';
+      $('#loginPass').focus();
+    });
+}
+
+function route() {
+  if (!S.profile) return;
+  if (S.profile.role === 'admin') renderAdmin();
+  else renderStudentHome();
+}
+
+/* ============================ FORGOT PASSWORD ============================= */
+
+function forgotPasswordModal() {
+  var role = S.loginRole;
+  var admin = role === 'admin';
+  var label = admin ? 'E-mail address' : 'Student number';
+  function alertHtml(kind, text) {
+    return '<div class="alert ' + kind + '"><span class="ic">' + (kind === 'error' ? '!' : 'i') +
+      '</span><div>' + esc(text) + '</div></div>';
+  }
+
+  openModal({
+    title: 'Reset your password',
+    body:
+      '<p class="small" id="fpIntro">Enter your ' + label.toLowerCase() + '. We\'ll e-mail a 6-digit code ' +
+        'to the address on file.</p>' +
+      '<div class="field"><label for="fpUser">' + label + '</label>' +
+        '<input type="' + (admin ? 'email' : 'text') + '" id="fpUser" autocomplete="username" value="' +
+        esc($('#loginUser').value.trim()) + '"></div>' +
+      '<div id="fpStep2" class="hidden">' +
+        '<div class="field"><label for="fpCode">Code from the e-mail</label>' +
+          '<input type="text" id="fpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>' +
+        '<div class="field"><label for="fpNew">New password</label>' +
+          '<input type="password" id="fpNew" autocomplete="new-password">' +
+          '<span class="hint">At least 6 characters.</span></div>' +
+        '<div class="field"><label for="fpNew2">Repeat new password</label>' +
+          '<input type="password" id="fpNew2" autocomplete="new-password"></div>' +
+      '</div>' +
+      '<div id="fpMsg"></div>',
+    footer:
+      '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn" id="fpHave">I have a code</button>' +
+      '<button class="btn primary" id="fpSend">Send code</button>' +
+      '<button class="btn primary hidden" id="fpSave">Set new password</button>',
+    onMount: function (root, close) {
+      var msg = root.querySelector('#fpMsg');
+      var user = root.querySelector('#fpUser');
+
+      function showStep2() {
+        root.querySelector('#fpStep2').classList.remove('hidden');
+        root.querySelector('#fpSave').classList.remove('hidden');
+        root.querySelector('#fpSend').classList.add('hidden');
+        root.querySelector('#fpHave').classList.add('hidden');
+        root.querySelector('#fpIntro').classList.add('hidden');
+        root.querySelector('#fpCode').focus();
+      }
+
+      root.querySelector('#fpHave').addEventListener('click', function () {
+        msg.innerHTML = '';
+        showStep2();
+      });
+
+      root.querySelector('#fpSend').addEventListener('click', function () {
+        var btn = this;
+        msg.innerHTML = '';
+        busy(btn, true, 'Sending…');
+        call('forgotPassword', { role: role, username: user.value.trim() })
+          .then(function (res) {
+            busy(btn, false);
+            msg.innerHTML = alertHtml('info', res.message);
+            showStep2();
+          })
+          .catch(function (err) {
+            busy(btn, false);
+            msg.innerHTML = alertHtml('error', err.message);
+          });
+      });
+
+      root.querySelector('#fpSave').addEventListener('click', function () {
+        var btn = this;
+        var a = root.querySelector('#fpNew').value;
+        var b = root.querySelector('#fpNew2').value;
+        msg.innerHTML = '';
+        if (a !== b) { msg.innerHTML = alertHtml('error', 'The two new passwords do not match.'); return; }
+        busy(btn, true, 'Saving…');
+        call('resetPassword', {
+          role: role,
+          username: user.value.trim(),
+          code: root.querySelector('#fpCode').value.trim(),
+          newPassword: a
+        }).then(function () {
+          close();
+          $('#loginUser').value = user.value.trim();
+          $('#loginPass').value = '';
+          $('#loginNotice').innerHTML = '<div class="alert ok"><span class="ic">✓</span><div>' +
+            'Your password has been changed. Sign in with your new password.</div></div>';
+          $('#loginPass').focus();
+        }).catch(function (err) {
+          busy(btn, false);
+          msg.innerHTML = alertHtml('error', err.message);
+        });
+      });
+    }
+  });
+}
+
+/* ============================ PASSWORD CHANGE ============================= */
+
+function promptPasswordChange(forced) {
+  openModal({
+    title: forced ? 'Choose your own password' : 'Change password',
+    locked: !!forced,
+    body:
+      (forced
+        ? '<div class="alert info"><span class="ic">i</span><div>You are still using the password your ' +
+          'instructor set. Please choose one only you know.</div></div>'
+        : '') +
+      '<div class="field"><label for="pwOld">Current password</label>' +
+      '<input type="password" id="pwOld" autocomplete="current-password"></div>' +
+      '<div class="field"><label for="pwNew">New password</label>' +
+      '<input type="password" id="pwNew" autocomplete="new-password">' +
+      '<span class="hint">At least 6 characters.</span></div>' +
+      '<div class="field"><label for="pwNew2">Repeat new password</label>' +
+      '<input type="password" id="pwNew2" autocomplete="new-password"></div>' +
+      '<div id="pwMsg"></div>',
+    footer:
+      (forced ? '' : '<button class="btn" data-close="1">Cancel</button>') +
+      '<button class="btn primary" id="pwSave">Save password</button>',
+    onMount: function (root, close) {
+      root.querySelector('#pwSave').addEventListener('click', function () {
+        var btn = this;
+        var oldPw = root.querySelector('#pwOld').value;
+        var a = root.querySelector('#pwNew').value;
+        var b = root.querySelector('#pwNew2').value;
+        var msg = root.querySelector('#pwMsg');
+        msg.innerHTML = '';
+        if (a !== b) {
+          msg.innerHTML = '<div class="alert error"><span class="ic">!</span><div>The two new passwords do not match.</div></div>';
+          return;
+        }
+        busy(btn, true, 'Saving…');
+        call('changePassword', { currentPassword: oldPw, newPassword: a })
+          .then(function (res) {
+            saveToken(res.token);
+            close();
+            toast('Your password has been changed.');
+            route();
+          })
+          .catch(function (err) {
+            busy(btn, false);
+            msg.innerHTML = '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+          });
+      });
+    }
+  });
+}
+
+/* ============================== NEW SCORES ================================= */
+/*  The browser remembers which scores it has shown this student, per device.
+    { init: true, k: { "<sectionId>|<assessmentId>": score } }
+    The first check only records a baseline, so nobody is greeted with every
+    score they already have marked as new.                                    */
+
+function seenKey() { return 'ee.seen.' + ((S.profile && S.profile.id) || '').toLowerCase(); }
+function seenLoad() {
+  try { var v = JSON.parse(localStorage.getItem(seenKey()) || 'null'); if (v && v.k) return v; } catch (e) {}
+  return { init: false, k: {} };
+}
+function seenSave(v) {
+  try { localStorage.setItem(seenKey(), JSON.stringify(v)); } catch (e) { /* private browsing */ }
+}
+function scoreKey(sectionId, itemId) { return String(sectionId) + '|' + String(itemId); }
+function isNewScore(seen, sectionId, itemId, score) {
+  if (!seen.init || score === null || score === undefined) return false;
+  var k = scoreKey(sectionId, itemId);
+  return !seen.k.hasOwnProperty(k) || Number(seen.k[k]) !== Number(score);
+}
+
+function checkScoreUpdates() {
+  call('student.updates', {}).then(function (u) {
+    var seen = seenLoad();
+    if (!seen.init) {
+      var base = { init: true, k: {} };
+      (u.scores || []).forEach(function (s) { base.k[scoreKey(s.sectionId, s.id)] = s.score; });
+      seenSave(base);
+      S.updates = { bySection: {}, total: 0 };
+    } else {
+      var by = {}, total = 0;
+      (u.scores || []).forEach(function (s) {
+        if (isNewScore(seen, s.sectionId, s.id, s.score)) { by[s.sectionId] = (by[s.sectionId] || 0) + 1; total++; }
+      });
+      S.updates = { bySection: by, total: total };
+    }
+    applyUpdateBadges();
+  }).catch(function () { /* badges are a nicety; never break the page */ });
+}
+
+function applyUpdateBadges() {
+  var u = S.updates;
+  var root = $('#content');
+  if (!u || !root || !root.querySelector('.card-grid')) return;
+  $$('.class-card[data-open]', root).forEach(function (card) {
+    var n = u.bySection[card.dataset.open] || 0;
+    var old = card.querySelector('.badge.new');
+    if (old) old.remove();
+    if (n) {
+      var b = document.createElement('span');
+      b.className = 'badge new';
+      b.textContent = n === 1 ? '1 new score' : n + ' new scores';
+      card.appendChild(b);
+    }
+  });
+  var note = $('#newScoresNote', root);
+  if (note) note.remove();
+  if (u.total) {
+    var div = document.createElement('div');
+    div.id = 'newScoresNote';
+    div.className = 'alert ok';
+    div.innerHTML = '<span class="ic">★</span><div>' +
+      (u.total === 1 ? 'You have 1 new score' : 'You have ' + u.total + ' new scores') +
+      ' since you last looked. Open a class to see it.</div>';
+    root.insertBefore(div, root.firstChild);
+  }
+}
+
+/* ============================== STUDENT VIEWS ============================= */
+
+function renderStudentHome() {
+  loading('Loading your classes…');
+  call('student.home', {}).then(function (data) {
+    S.student = data;
+    drawStudentHome();
+    checkScoreUpdates();
+  }).catch(function (err) {
+    setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+  });
+}
+
+function drawStudentHome() {
+    var data = S.student;
+    var semesters = data.semesters || [];
+    var current = data.activeSemesterId;
+    var classes = (data.classes || []).filter(function (c) {
+      return !current || c.semesterId === current;
+    });
+
+    var html = '';
+    if (data.announcement) {
+      html += '<div class="alert info"><span class="ic">i</span><div>' + esc(data.announcement) + '</div></div>';
+    }
+
+    html += '<div class="row wrap" style="margin-bottom:16px">' +
+      '<div><h2 style="font-size:20px">Hello, ' + esc(data.profile.firstName || data.profile.name) + '</h2>' +
+      '<div class="small muted">' + esc(data.profile.id) +
+      (data.profile.program ? ' · ' + esc(data.profile.program) : '') +
+      (data.profile.yearLevel ? ' · Year ' + esc(data.profile.yearLevel) : '') + '</div></div>' +
+      '<div class="spacer"></div>';
+    if (semesters.length > 1) {
+      html += '<select id="semPick" style="width:auto;min-width:220px">' +
+        semesters.map(function (s) {
+          return '<option value="' + esc(s.id) + '"' + (s.id === current ? ' selected' : '') + '>' +
+            esc(s.name) + '</option>';
+        }).join('') + '</select>';
+    }
+    html += '</div>';
+
+    if (!classes.length) {
+      html += empty('No classes yet',
+        'You are not enrolled in any class for this semester. Your instructor adds you to a class before your scores appear here.');
+    } else {
+      html += '<div class="card-grid">' + classes.map(function (c) {
+        return '<button class="class-card" data-open="' + esc(c.id) + '">' +
+          '<div class="code">' + esc(c.subjectCode || '—') + '</div>' +
+          '<div class="title">' + esc(c.subjectTitle || c.name) + '</div>' +
+          '<div class="meta">' + esc(c.name) + (c.instructor ? ' · ' + esc(c.instructor) : '') + '</div>' +
+          '<div class="row" style="gap:6px;margin-top:2px">' +
+            (c.schedule ? '<span class="badge">' + esc(c.schedule) + '</span>' : '') +
+            (c.room ? '<span class="badge">' + esc(c.room) + '</span>' : '') +
+          '</div>' +
+        '</button>';
+      }).join('') + '</div>';
+    }
+
+    setContent(html);
+    applyUpdateBadges();
+
+    var pick = $('#semPick');
+    if (pick) pick.addEventListener('change', function () {
+      S.student.activeSemesterId = this.value;
+      drawStudentHome();
+    });
+    $('#content').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-open]');
+      if (b) renderStudentClass(b.dataset.open);
+    });
+}
+
+function renderStudentClass(sectionId) {
+  loading('Opening your class record…');
+  call('student.class', { sectionId: sectionId }).then(function (d) {
+    var sec = d.section;
+    var seen = seenLoad();
+    var g = d.grade || {};
+    var pct = g.percent === null || g.percent === undefined ? null : g.percent;
+
+    var html = '<button class="btn ghost sm" id="backHome" style="margin-bottom:14px">← All classes</button>';
+
+    html += '<div class="card"><div class="card-body">' +
+      '<div class="row wrap" style="gap:8px;margin-bottom:6px">' +
+        '<span class="badge green">' + esc(sec.subjectCode) + '</span>' +
+        '<span class="badge">' + esc(sec.name) + '</span>' +
+        (sec.units ? '<span class="badge">' + esc(sec.units) + ' units</span>' : '') +
+      '</div>' +
+      '<h2 style="font-size:19px">' + esc(sec.subjectTitle) + '</h2>' +
+      '<div class="small muted">' +
+        (sec.instructor ? esc(sec.instructor) + ' · ' : '') +
+        (sec.schedule ? esc(sec.schedule) + ' · ' : '') +
+        (sec.room ? esc(sec.room) + ' · ' : '') +
+        esc(sec.semesterName) +
+      '</div>' +
+    '</div></div>';
+
+    if (d.showRunningGrade) {
+      html += '<div class="card"><div class="card-body">' +
+        '<div class="grade-hero">' +
+          '<div class="grade-dial" style="--pct:' + (pct === null ? 0 : Math.max(0, Math.min(100, pct))) + '">' +
+            '<div class="inner"><div class="g">' + (g.grade === null || g.grade === undefined ? '—' : fmt(g.grade, 2)) + '</div>' +
+            '<div class="l">Equivalent</div></div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="stat-row">' +
+              '<div class="stat"><div class="v">' + (pct === null ? '—' : fmt(pct, 2) + '%') + '</div><div class="k">Running average</div></div>' +
+              '<div class="stat"><div class="v">' + esc(g.remark || '—') + '</div><div class="k">Standing</div></div>' +
+              '<div class="stat"><div class="v">' + (g.recorded || 0) + ' / ' + (g.items || 0) + '</div><div class="k">Recorded</div></div>' +
+            '</div>' +
+            '<p class="tiny faint" style="margin:14px 0 0">' +
+              (g.mode === 'weighted'
+                ? 'Weighted average of the requirements recorded so far' +
+                  (g.weightCovered !== null && g.weightTotal !== null
+                    ? ' (' + fmt(g.weightCovered, 0) + '% of ' + fmt(g.weightTotal, 0) + '% total weight).'
+                    : '.')
+                : 'Total points earned over total points possible for the requirements recorded so far.') +
+              ' This is not a final grade.' +
+            '</p>' +
+          '</div>' +
+        '</div>' +
+      '</div></div>';
+    }
+
+    html += '<div class="card"><div class="card-head"><h3>Requirements</h3>' +
+      '<div class="spacer"></div><span class="small muted">' + (d.classSize || 0) + ' students in class</span></div>';
+
+    if (!d.items.length) {
+      html += '<div class="card-body">' + empty('Nothing posted yet',
+        'Your instructor has not published any exams or requirements for this class.') + '</div>';
+    } else {
+      html += '<div class="table-wrap"><table><thead><tr>' +
+        '<th>Requirement</th><th class="hide-sm">Type</th><th class="nowrap hide-sm">Date</th>' +
+        '<th class="num">Score</th><th class="num">Max</th><th class="num">%</th>' +
+        (d.showClassAverage ? '<th class="num hide-sm">Class ave</th>' : '') +
+        '<th class="num hide-sm">Weight</th>' +
+        '</tr></thead><tbody>' +
+        d.items.map(function (it) {
+          var pending = it.score === null;
+          return '<tr>' +
+            '<td><b>' + esc(it.name) + '</b>' +
+              (isNewScore(seen, sec.id, it.id, it.score) ? ' <span class="badge new">New</span>' : '') +
+              '<div class="tiny muted hide-lg">' + esc(it.type) +
+              (it.weight ? ' · ' + fmt(it.weight, 0) + '%' : '') + '</div></td>' +
+            '<td class="hide-sm"><span class="badge">' + esc(it.type) + '</span></td>' +
+            '<td class="nowrap small muted hide-sm">' + esc(it.date || '—') + '</td>' +
+            '<td class="num">' + (pending
+              ? '<span class="badge grey">not yet</span>'
+              : '<b>' + fmtScore(it.score) + '</b>') + '</td>' +
+            '<td class="num muted">' + fmtScore(it.max) + '</td>' +
+            '<td class="num">' + (it.percent === null ? '—' : fmt(it.percent, 1) + '%') + '</td>' +
+            (d.showClassAverage
+              ? '<td class="num muted hide-sm">' + (it.classAverage === null ? '—' : fmtScore(it.classAverage)) + '</td>'
+              : '') +
+            '<td class="num muted hide-sm">' + (it.weight ? fmt(it.weight, 0) + '%' : '—') + '</td>' +
+          '</tr>';
+        }).join('') +
+        '</tbody></table></div>';
+    }
+    html += '</div>';
+
+    html += '<p class="tiny faint" style="margin-top:14px">Scores are entered by your instructor. ' +
+      'If something looks wrong, please talk to them first.</p>';
+
+    setContent(html);
+    $('#backHome').addEventListener('click', renderStudentHome);
+
+    // Everything on this screen has now been seen.
+    if (seen.init) {
+      d.items.forEach(function (it) {
+        if (it.score !== null && it.score !== undefined) seen.k[scoreKey(sec.id, it.id)] = it.score;
+      });
+      seenSave(seen);
+      if (S.updates && S.updates.bySection[sec.id]) {
+        S.updates.total -= S.updates.bySection[sec.id];
+        delete S.updates.bySection[sec.id];
+      }
+    }
+  }).catch(function (err) {
+    setContent('<button class="btn ghost sm" id="backHome" style="margin-bottom:14px">← All classes</button>' +
+      '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+    var b = $('#backHome');
+    if (b) b.addEventListener('click', renderStudentHome);
+  });
+}
+
+/* ============================== ADMIN VIEWS =============================== */
+
+function renderAdmin() {
+  if (S.section) { renderGradebook(S.section); return; }
+  loading('Loading dashboard…');
+  call('admin.home', { semesterId: S.admin ? S.admin.semesterId : '' }).then(function (data) {
+    S.admin = data;
+    drawAdminTab();
+  }).catch(function (err) {
+    setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+  });
+}
+
+function refreshAdmin(semesterId) {
+  return call('admin.home', { semesterId: semesterId || (S.admin && S.admin.semesterId) })
+    .then(function (data) { S.admin = data; drawAdminTab(); });
+}
+
+function drawAdminTab() {
+  if (S.tab === 'classes') renderClassesTab();
+  else if (S.tab === 'students') renderStudentsTab();
+  else if (S.tab === 'subjects') renderSubjectsTab();
+  else if (S.tab === 'semesters') renderSemestersTab();
+  else renderSettingsTab();
+}
+
+function semesterPicker() {
+  var a = S.admin;
+  if (!a.semesters.length) return '';
+  return '<select id="admSem" style="width:auto;min-width:230px">' +
+    a.semesters.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === a.semesterId ? ' selected' : '') + '>' +
+        esc(s.name) + '</option>';
+    }).join('') + '</select>';
+}
+
+function bindSemesterPicker() {
+  var p = $('#admSem');
+  if (p) p.addEventListener('change', function () { refreshAdmin(this.value); });
+}
+
+/* ------------------------------ classes tab ------------------------------ */
+
+function renderClassesTab() {
+  var a = S.admin;
+  var html = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Classes</h2>' +
+    '<div class="small muted">' + a.sections.length + ' class(es) · ' +
+    a.counts.students + ' students registered</div></div>' +
+    '<div class="spacer"></div>' + semesterPicker() +
+    '<button class="btn primary" id="newSection">+ New class</button></div>';
+
+  if (!a.semesters.length) {
+    html += '<div class="alert warn"><span class="ic">!</span><div>Create a semester first — ' +
+      'each semester becomes its own folder in Google Drive.</div></div>';
+  } else if (!a.subjects.length) {
+    html += '<div class="alert warn"><span class="ic">!</span><div>Add at least one subject before ' +
+      'creating a class.</div></div>';
+  }
+
+  if (!a.sections.length) {
+    html += empty('No classes in this semester', 'Each class you create becomes its own Google Sheet inside the semester folder.');
+  } else {
+    html += '<div class="card"><div class="table-wrap"><table><thead><tr>' +
+      '<th>Subject</th><th>Section</th><th>Instructor</th><th>Schedule</th>' +
+      '<th class="num">Students</th><th></th></tr></thead><tbody>' +
+      a.sections.map(function (s) {
+        return '<tr>' +
+          '<td><b>' + esc(s.subjectCode) + '</b><div class="small muted">' + esc(s.subjectTitle) + '</div></td>' +
+          '<td>' + esc(s.name) +
+            (s.status && s.status.toLowerCase() === 'archived'
+              ? ' <span class="badge gold">archived</span>' : '') + '</td>' +
+          '<td class="small">' + esc(s.instructor || '—') + '</td>' +
+          '<td class="small muted">' + esc(s.schedule || '—') + (s.room ? ' · ' + esc(s.room) : '') + '</td>' +
+          '<td class="num">' + (s.enrolled || 0) + '</td>' +
+          '<td class="right nowrap">' +
+            '<button class="btn sm primary" data-gb="' + esc(s.id) + '">Open</button> ' +
+            '<button class="btn sm" data-edit="' + esc(s.id) + '">Edit</button>' +
+          '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
+
+  setContent(html);
+  bindSemesterPicker();
+  var nb = $('#newSection');
+  if (nb) nb.addEventListener('click', sectionModal);
+  $('#content').addEventListener('click', function (e) {
+    var g = e.target.closest('[data-gb]');
+    if (g) { S.section = g.dataset.gb; renderGradebook(g.dataset.gb); return; }
+    var ed = e.target.closest('[data-edit]');
+    if (ed) {
+      var sec = S.admin.sections.filter(function (x) { return x.id === ed.dataset.edit; })[0];
+      sectionModal(sec);
+    }
+  });
+}
+
+function sectionModal(section) {
+  var a = S.admin;
+  var editing = section && section.id;
+  openModal({
+    title: editing ? 'Edit class' : 'New class',
+    body:
+      '<div class="grid2">' +
+        '<div class="field"><label>Subject</label><select id="fSubject">' +
+          a.subjects.map(function (s) {
+            return '<option value="' + esc(s.id) + '"' +
+              (editing && s.id === section.subjectId ? ' selected' : '') + '>' +
+              esc(s.code) + ' — ' + esc(s.title) + '</option>';
+          }).join('') + '</select></div>' +
+        '<div class="field"><label>Section name</label>' +
+          '<input type="text" id="fName" placeholder="BSIT 1-A" value="' +
+          esc(editing ? section.name : '') + '"></div>' +
+      '</div>' +
+      '<div class="grid2">' +
+        '<div class="field"><label>Instructor</label><input type="text" id="fInstructor" value="' +
+          esc(editing ? section.instructor : (S.profile.name || '')) + '"></div>' +
+        '<div class="field"><label>Room</label><input type="text" id="fRoom" value="' +
+          esc(editing ? section.room : '') + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>Schedule</label><input type="text" id="fSchedule" ' +
+        'placeholder="MWF 8:00–9:00 AM" value="' + esc(editing ? section.schedule : '') + '"></div>' +
+      (editing
+        ? '<div class="field"><label>Status</label><select id="fStatus">' +
+          ['Active', 'Archived'].map(function (v) {
+            return '<option' + (String(section.status).toLowerCase() === v.toLowerCase() ? ' selected' : '') +
+              '>' + v + '</option>';
+          }).join('') + '</select></div>'
+        : '<p class="tiny faint">A new Google Sheet will be created for this class inside the semester folder.</p>') +
+      '<div id="secMsg"></div>',
+    footer:
+      (editing ? '<button class="btn danger" id="secDelete">Delete…</button><div class="spacer"></div>' : '') +
+      '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="secSave">' + (editing ? 'Save' : 'Create class') + '</button>',
+    onMount: function (root, close) {
+      root.querySelector('#secSave').addEventListener('click', function () {
+        var btn = this;
+        var payload = {
+          id: editing ? section.id : undefined,
+          semesterId: a.semesterId,
+          subjectId: root.querySelector('#fSubject') ? root.querySelector('#fSubject').value : '',
+          name: root.querySelector('#fName').value.trim(),
+          instructor: root.querySelector('#fInstructor').value.trim(),
+          room: root.querySelector('#fRoom').value.trim(),
+          schedule: root.querySelector('#fSchedule').value.trim()
+        };
+        if (editing) payload.status = root.querySelector('#fStatus').value;
+        busy(btn, true, editing ? 'Saving…' : 'Creating…');
+        call(editing ? 'admin.section.update' : 'admin.section.create', payload)
+          .then(function () { close(); toast(editing ? 'Class updated.' : 'Class created.'); refreshAdmin(); })
+          .catch(function (err) {
+            busy(btn, false);
+            root.querySelector('#secMsg').innerHTML =
+              '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+          });
+      });
+
+      var del = root.querySelector('#secDelete');
+      if (del) del.addEventListener('click', function () {
+        confirmDialog('Delete this class?',
+          'The class will be removed from the portal and its Google Sheet moved to your Drive trash. ' +
+          'You can restore it from the trash for 30 days.',
+          'Delete class', true).then(function (yes) {
+          if (!yes) return;
+          call('admin.section.remove', { id: section.id, mode: 'delete' })
+            .then(function () { close(); toast('Class deleted.'); refreshAdmin(); })
+            .catch(function (err) { toast(err.message, 'error'); });
+        });
+      });
+    }
+  });
+}
+
+/* ------------------------------- gradebook -------------------------------- */
+
+function renderGradebook(sectionId) {
+  loading('Opening class record…');
+  S.dirty = {};
+  call('admin.section.data', { sectionId: sectionId }).then(function (d) {
+    S.gb = d;
+    drawGradebook();
+  }).catch(function (err) {
+    S.section = null;
+    setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>' +
+      '<button class="btn" id="backCls">← Back to classes</button>');
+    $('#backCls').addEventListener('click', function () { S.section = null; renderAdmin(); });
+  });
+}
+
+function drawGradebook() {
+  var d = S.gb;
+  var sec = d.section;
+  var html = '<button class="btn ghost sm" id="backCls" style="margin-bottom:12px">← All classes</button>';
+
+  html += '<div class="row wrap" style="margin-bottom:14px">' +
+    '<div><h2 style="font-size:19px">' + esc(sec.subjectCode) + ' · ' + esc(sec.name) + '</h2>' +
+    '<div class="small muted">' + esc(sec.subjectTitle) + ' · ' + esc(sec.semesterName) +
+    ' · ' + d.students.length + ' students</div></div>' +
+    '<div class="spacer"></div>' +
+    '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(d.spreadsheetUrl) + '">Open in Sheets ↗</a>' +
+    '<button class="btn sm" id="gbAddStudents">+ Students</button>' +
+    '<button class="btn sm primary" id="gbAddAsm">+ Requirement</button>' +
+    '<button class="btn sm gold" id="gbExport">⬇ Class record (PDF)</button>' +
+    '<button class="btn sm" id="gbMore">⋯</button>' +
+  '</div>';
+
+  if (d.assessments.length && d.totalWeight > 0 && Math.abs(d.totalWeight - 100) > 0.01) {
+    html += '<div class="alert warn"><span class="ic">!</span><div>The weights on this class add up to <b>' +
+      fmt(d.totalWeight, 2) + '%</b>, not 100%. Running grades are scaled to the weight recorded so far, ' +
+      'so this still works — adjust the weights if that was not intended.</div></div>';
+  }
+
+  if (!d.students.length) {
+    html += '<div class="card"><div class="card-body">' + empty('No students in this class',
+      'Add students from your registry, or type their IDs straight into the Grades tab of the sheet.',
+      '<button class="btn primary" id="gbAddStudents2" style="margin-top:12px">+ Add students</button>') +
+      '</div></div>';
+  } else {
+    html += '<div class="gb-wrap"><table class="gb"><thead><tr>' +
+      '<th class="stick">Student</th>' +
+      d.assessments.map(function (a) {
+        return '<th class="asm num" data-asm="' + esc(a.id) + '" title="Click to edit">' +
+          '<div class="asm-name">' + esc(a.name) + (a.published ? '' : ' 🔒') + '</div>' +
+          '<div class="asm-sub">/' + fmtScore(a.max) + (a.weight ? ' · ' + fmt(a.weight, 0) + '%' : '') + '</div>' +
+        '</th>';
+      }).join('') +
+      '<th class="num">%</th><th class="num">Grade</th><th></th>' +
+      '</tr></thead><tbody>' +
+      d.students.map(function (s) {
+        return '<tr data-sid="' + esc(s.studentId) + '">' +
+          '<td class="stick"><div class="gb-name">' + esc(s.lastName + ', ' + s.firstName) + '</div>' +
+          '<div class="gb-id">' + esc(s.studentId) + '</div></td>' +
+          d.assessments.map(function (a) {
+            var v = s.scores[a.id];
+            return '<td class="num"><input class="score" type="number" step="any" min="0" ' +
+              'data-sid="' + esc(s.studentId) + '" data-aid="' + esc(a.id) + '" ' +
+              'value="' + (v === null || v === undefined ? '' : esc(v)) + '"></td>';
+          }).join('') +
+          '<td class="num total">' + (s.grade.percent === null ? '—' : fmt(s.grade.percent, 1)) + '</td>' +
+          '<td class="num total">' + (s.grade.grade === null ? '—' : fmt(s.grade.grade, 2)) + '</td>' +
+          '<td class="right"><button class="btn ghost sm" data-drop="' + esc(s.studentId) + '" title="Remove from class">✕</button></td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table></div>';
+
+    html += '<div class="sticky-actions"><span class="small muted" id="dirtyCount">No unsaved changes</span>' +
+      '<div class="spacer"></div>' +
+      '<button class="btn" id="gbRevert" disabled>Discard</button>' +
+      '<button class="btn primary" id="gbSave" disabled>Save scores</button></div>';
+  }
+
+  setContent(html);
+  bindGradebook();
+}
+
+function bindGradebook() {
+  var d = S.gb;
+  $('#backCls').addEventListener('click', function () { S.section = null; S.gb = null; renderAdmin(); });
+
+  var add = $('#gbAddStudents'), add2 = $('#gbAddStudents2');
+  if (add) add.addEventListener('click', enrollModal);
+  if (add2) add2.addEventListener('click', enrollModal);
+  var aa = $('#gbAddAsm');
+  if (aa) aa.addEventListener('click', function () { assessmentModal(null); });
+
+  /* --- turn the base64 the server sends back into a real file download --- */
+  function saveBase64(b64, filename) {
+    try {
+      var bin = atob(b64);
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      var blob = new Blob([bytes], { type: 'application/pdf' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 5000);
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  var exportBtn = $('#gbExport');
+  if (exportBtn) exportBtn.addEventListener('click', function () {
+    var btn = this;
+    busy(btn, true, 'Building…');
+    call('admin.export.pdf', { sectionId: d.section.id })
+      .then(function (res) {
+        busy(btn, false);
+        openModal({
+          title: 'Class record ready',
+          body:
+            '<p class="small" style="margin-bottom:14px">' + esc(res.students) +
+              ' student(s), with every requirement, totals, grade, standing and rank.</p>' +
+            '<div class="copybox" style="margin-bottom:16px">' + esc(res.name) + '</div>' +
+            '<div class="stack" style="gap:10px">' +
+              '<button class="btn primary block" id="pdfDl">⬇ Download the PDF</button>' +
+              (res.driveUrl
+                ? '<a class="btn block" target="_blank" rel="noopener" href="' + esc(res.driveUrl) +
+                  '">Open it in Drive ↗</a>'
+                : '') +
+              (res.sheetUrl
+                ? '<a class="btn block ghost" target="_blank" rel="noopener" href="' + esc(res.sheetUrl) +
+                  '">See the “Class Record” tab in the sheet ↗</a>'
+                : '') +
+            '</div>' +
+            '<p class="tiny faint" style="margin-top:14px">A copy is filed in the ' +
+            '<b>Class Records</b> folder of this semester, so you can print it again later ' +
+            'without rebuilding it.</p>' +
+            '<div id="pdfMsg"></div>',
+          footer: '<button class="btn" data-close="1">Close</button>',
+          onMount: function (root) {
+            root.querySelector('#pdfDl').addEventListener('click', function () {
+              var ok = saveBase64(res.base64, res.name);
+              root.querySelector('#pdfMsg').innerHTML = ok
+                ? '<div class="alert ok" style="margin:14px 0 0"><span class="ic">✓</span>' +
+                  '<div>Saved to your downloads.</div></div>'
+                : '<div class="alert warn" style="margin:14px 0 0"><span class="ic">!</span>' +
+                  '<div>Your browser blocked the direct download. Use “Open it in Drive” instead.</div></div>';
+            });
+          }
+        });
+      })
+      .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+  });
+
+  var more = $('#gbMore');
+  if (more) more.addEventListener('click', function () {
+    openModal({
+      title: 'Class tools',
+      body:
+        '<div class="stack">' +
+          '<button class="btn block" id="tSummary">Rebuild the Summary tab in the sheet</button>' +
+          '<button class="btn block" id="tSync">Re-read the class list from the sheet</button>' +
+          '<a class="btn block" target="_blank" rel="noopener" href="' + esc(d.spreadsheetUrl) + '">Open the Google Sheet ↗</a>' +
+        '</div>' +
+        '<p class="tiny faint" style="margin-top:14px">Use “Re-read the class list” after you add or delete ' +
+        'student rows directly in the Grades tab.</p>',
+      footer: '<button class="btn" data-close="1">Close</button>',
+      onMount: function (root, close) {
+        root.querySelector('#tSummary').addEventListener('click', function () {
+          var b = this; busy(b, true, 'Rebuilding…');
+          call('admin.summary.rebuild', { sectionId: d.section.id })
+            .then(function (r) { busy(b, false); toast('Summary rebuilt for ' + r.rows + ' students.'); })
+            .catch(function (e) { busy(b, false); toast(e.message, 'error'); });
+        });
+        root.querySelector('#tSync').addEventListener('click', function () {
+          var b = this; busy(b, true, 'Syncing…');
+          call('admin.section.sync', { sectionId: d.section.id })
+            .then(function () { close(); toast('Class list refreshed.'); renderGradebook(d.section.id); })
+            .catch(function (e) { busy(b, false); toast(e.message, 'error'); });
+        });
+      }
+    });
+  });
+
+  var head = $('#content');
+  head.addEventListener('click', function (e) {
+    var th = e.target.closest('th[data-asm]');
+    if (th) {
+      var a = d.assessments.filter(function (x) { return x.id === th.dataset.asm; })[0];
+      if (a) assessmentModal(a);
+      return;
+    }
+    var drop = e.target.closest('[data-drop]');
+    if (drop) {
+      var sid = drop.dataset.drop;
+      confirmDialog('Remove from class?',
+        'This removes ' + sid + ' and their scores from this class record. The student stays in your registry.',
+        'Remove', true).then(function (yes) {
+        if (!yes) return;
+        call('admin.section.unenroll', { sectionId: d.section.id, studentId: sid })
+          .then(function () { toast('Student removed.'); renderGradebook(d.section.id); })
+          .catch(function (err) { toast(err.message, 'error'); });
+      });
+    }
+  });
+
+  $$('.score').forEach(function (input) {
+    input.addEventListener('input', function () { markDirty(this); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        moveFocus(this, e.key === 'ArrowUp' ? -1 : 1);
+      }
+    });
+  });
+
+  var saveBtn = $('#gbSave');
+  if (saveBtn) saveBtn.addEventListener('click', saveScores);
+  var revert = $('#gbRevert');
+  if (revert) revert.addEventListener('click', function () { renderGradebook(S.gb.section.id); });
+}
+
+function markDirty(input) {
+  var key = input.dataset.sid + '||' + input.dataset.aid;
+  S.dirty[key] = input.value;
+  input.classList.add('dirty');
+  var n = Object.keys(S.dirty).length;
+  var label = $('#dirtyCount');
+  if (label) label.textContent = n === 0 ? 'No unsaved changes'
+    : n + ' unsaved change' + (n === 1 ? '' : 's');
+  var save = $('#gbSave'), revert = $('#gbRevert');
+  if (save) save.disabled = n === 0;
+  if (revert) revert.disabled = n === 0;
+}
+
+function moveFocus(input, delta) {
+  var cells = $$('.score[data-aid="' + input.dataset.aid + '"]');
+  var i = cells.indexOf(input);
+  var next = cells[i + delta];
+  if (next) { next.focus(); next.select(); }
+}
+
+function saveScores() {
+  var btn = $('#gbSave');
+  var changes = Object.keys(S.dirty).map(function (k) {
+    var parts = k.split('||');
+    return { studentId: parts[0], assessmentId: parts[1], value: S.dirty[k] };
+  });
+  if (!changes.length) return;
+  busy(btn, true, 'Saving…');
+  call('admin.scores.save', { sectionId: S.gb.section.id, changes: changes })
+    .then(function (res) {
+      S.dirty = {};
+      if (res.problems && res.problems.length) {
+        toast(res.saved + ' saved · ' + res.problems.length + ' skipped: ' + res.problems[0], 'warn');
+      } else {
+        toast(res.saved + ' score' + (res.saved === 1 ? '' : 's') + ' saved.');
+      }
+      renderGradebook(S.gb.section.id);
+    })
+    .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+}
+
+function assessmentModal(a) {
+  var editing = !!a;
+  var types = S.admin.assessmentTypes || ['Exam', 'Quiz', 'Other'];
+  openModal({
+    title: editing ? 'Edit requirement' : 'New requirement',
+    body:
+      '<div class="field"><label>Name</label><input type="text" id="aName" ' +
+        'placeholder="Midterm Exam" value="' + esc(editing ? a.name : '') + '"></div>' +
+      '<div class="grid3">' +
+        '<div class="field"><label>Type</label><select id="aType">' +
+          types.map(function (t) {
+            return '<option' + (editing && a.type === t ? ' selected' : '') + '>' + esc(t) + '</option>';
+          }).join('') + '</select></div>' +
+        '<div class="field"><label>Max score</label><input type="number" step="any" min="0" id="aMax" value="' +
+          esc(editing ? a.max : 100) + '"></div>' +
+        '<div class="field"><label>Weight %</label><input type="number" step="any" min="0" id="aWeight" value="' +
+          esc(editing ? a.weight : 0) + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>Date</label><input type="date" id="aDate" value="' +
+        esc(editing ? a.date : '') + '"></div>' +
+      '<div class="field"><label class="checkline"><input type="checkbox" id="aPub"' +
+        (!editing || a.published ? ' checked' : '') + '> Visible to students</label>' +
+        '<span class="hint">Uncheck while you are still encoding scores.</span></div>' +
+      '<p class="tiny faint">Leave every weight at 0 to grade on total points instead of weighted averages.</p>' +
+      '<div id="aMsg"></div>',
+    footer:
+      (editing ? '<button class="btn danger" id="aDelete">Delete…</button><div class="spacer"></div>' : '') +
+      '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="aSave">' + (editing ? 'Save' : 'Add requirement') + '</button>',
+    onMount: function (root, close) {
+      root.querySelector('#aSave').addEventListener('click', function () {
+        var btn = this;
+        var payload = {
+          sectionId: S.gb.section.id,
+          id: editing ? a.id : undefined,
+          name: root.querySelector('#aName').value.trim(),
+          type: root.querySelector('#aType').value,
+          max: root.querySelector('#aMax').value,
+          weight: root.querySelector('#aWeight').value,
+          date: root.querySelector('#aDate').value,
+          published: root.querySelector('#aPub').checked
+        };
+        busy(btn, true, 'Saving…');
+        call(editing ? 'admin.assessment.update' : 'admin.assessment.create', payload)
+          .then(function () { close(); toast('Saved.'); renderGradebook(S.gb.section.id); })
+          .catch(function (err) {
+            busy(btn, false);
+            root.querySelector('#aMsg').innerHTML =
+              '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+          });
+      });
+      var del = root.querySelector('#aDelete');
+      if (del) del.addEventListener('click', function () {
+        confirmDialog('Delete this requirement?',
+          'The column and every score in it will be deleted from the class sheet. This cannot be undone from here.',
+          'Delete', true).then(function (yes) {
+          if (!yes) return;
+          call('admin.assessment.delete', { sectionId: S.gb.section.id, id: a.id })
+            .then(function () { close(); toast('Requirement deleted.'); renderGradebook(S.gb.section.id); })
+            .catch(function (err) { toast(err.message, 'error'); });
+        });
+      });
+    }
+  });
+}
+
+function enrollModal() {
+  var enrolled = {};
+  S.gb.students.forEach(function (s) { enrolled[s.studentId.toLowerCase()] = true; });
+
+  openModal({
+    title: 'Add students to ' + S.gb.section.name,
+    wide: true,
+    body:
+      '<div class="field"><input type="text" id="enSearch" placeholder="Search the registry by name, ID or program…"></div>' +
+      '<div id="enList" style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px">' +
+        '<div class="loading"><span class="spinner"></span> Loading registry…</div></div>' +
+      '<div class="section-title">Or paste Student IDs</div>' +
+      '<textarea id="enPaste" placeholder="21-123456&#10;21-123457" style="min-height:80px"></textarea>' +
+      '<div id="enMsg"></div>',
+    footer: '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="enAdd">Add selected</button>',
+    onMount: function (root, close) {
+      var listBox = root.querySelector('#enList');
+
+      function load(q) {
+        call('admin.students.list', { q: q || '', pageSize: 300 }).then(function (res) {
+          var items = res.items.filter(function (s) { return !enrolled[s.id.toLowerCase()]; });
+          if (!items.length) {
+            listBox.innerHTML = '<div class="empty small" style="padding:26px">' +
+              (res.total ? 'Everyone matching is already in this class.' : 'No students found. Register them first under the Students tab.') +
+              '</div>';
+            return;
+          }
+          listBox.innerHTML = items.map(function (s) {
+            return '<label class="checkline" style="padding:8px 12px;border-bottom:1px solid var(--border)">' +
+              '<input type="checkbox" value="' + esc(s.id) + '">' +
+              '<span><b>' + esc(s.lastName + ', ' + s.firstName) + '</b> ' +
+              '<span class="tiny faint mono">' + esc(s.id) + '</span>' +
+              (s.program ? '<div class="tiny muted">' + esc(s.program) +
+                (s.yearLevel ? ' · Year ' + esc(s.yearLevel) : '') + '</div>' : '') +
+              '</span></label>';
+          }).join('');
+        }).catch(function (err) {
+          listBox.innerHTML = '<div class="alert error" style="margin:12px"><span class="ic">!</span><div>' +
+            esc(err.message) + '</div></div>';
+        });
+      }
+      load('');
+
+      var timer;
+      root.querySelector('#enSearch').addEventListener('input', function () {
+        var v = this.value;
+        clearTimeout(timer);
+        timer = setTimeout(function () { load(v); }, 260);
+      });
+
+      root.querySelector('#enAdd').addEventListener('click', function () {
+        var btn = this;
+        var ids = $$('#enList input:checked', root).map(function (i) { return i.value; });
+        root.querySelector('#enPaste').value.split(/[\s,;]+/).forEach(function (v) {
+          if (v.trim()) ids.push(v.trim());
+        });
+        if (!ids.length) { toast('Select at least one student.', 'warn'); return; }
+        busy(btn, true, 'Adding…');
+        call('admin.section.enroll', { sectionId: S.gb.section.id, studentIds: ids })
+          .then(function (res) {
+            close();
+            if (res.missing && res.missing.length) {
+              toast(res.added + ' added · not in registry: ' + res.missing.join(', '), 'warn');
+            } else {
+              toast(res.added + ' student(s) added.');
+            }
+            renderGradebook(S.gb.section.id);
+          })
+          .catch(function (err) {
+            busy(btn, false);
+            root.querySelector('#enMsg').innerHTML =
+              '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+          });
+      });
+    }
+  });
+}
+
+/* ------------------------------ students tab ----------------------------- */
+
+function renderStudentsTab() {
+  var html = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Student registry</h2>' +
+    '<div class="small muted">Everyone who can sign in to the portal</div></div>' +
+    '<div class="spacer"></div>' +
+    '<button class="btn" id="stImport">Import list</button>' +
+    '<button class="btn primary" id="stNew">+ New student</button></div>' +
+    '<div class="card"><div class="card-head">' +
+      '<input type="text" id="stSearch" placeholder="Search by name, ID, e-mail or program…" ' +
+      'style="max-width:340px" value="' + esc(S.studentQuery) + '">' +
+      '<div class="spacer"></div><span class="small muted" id="stCount"></span>' +
+    '</div><div id="stBody"><div class="loading"><span class="spinner"></span> Loading…</div></div></div>';
+
+  setContent(html);
+  $('#stNew').addEventListener('click', function () { studentModal(null); });
+  $('#stImport').addEventListener('click', importModal);
+  var timer;
+  $('#stSearch').addEventListener('input', function () {
+    var v = this.value;
+    clearTimeout(timer);
+    timer = setTimeout(function () { S.studentQuery = v; S.studentPage = 1; loadStudents(); }, 280);
+  });
+
+  // Bound once here, not inside loadStudents — #stBody survives every reload
+  // of the table, so re-binding there would stack duplicate handlers.
+  $('#stBody').addEventListener('click', function (e) {
+    var ed = e.target.closest('[data-sedit]');
+    if (ed) {
+      var s = (S.studentItems || []).filter(function (x) { return x.id === ed.dataset.sedit; })[0];
+      if (s) studentModal(s);
+      return;
+    }
+    var rs = e.target.closest('[data-sreset]');
+    if (rs) { resetPasswordModal(rs.dataset.sreset); return; }
+    var pg = e.target.closest('[data-page]');
+    if (pg && !pg.disabled) {
+      S.studentPage = Number(pg.dataset.page);
+      loadStudents();
+    }
+  });
+
+  loadStudents();
+}
+
+function loadStudents() {
+  call('admin.students.list', { q: S.studentQuery, page: S.studentPage, pageSize: 50 })
+    .then(function (res) {
+      S.studentItems = res.items;
+      $('#stCount').textContent = res.total + ' student' + (res.total === 1 ? '' : 's');
+      if (!res.items.length) {
+        $('#stBody').innerHTML = empty('No students found',
+          S.studentQuery ? 'Try a different search.' : 'Add students one by one, or import a list.');
+        return;
+      }
+      var pages = Math.ceil(res.total / res.pageSize);
+      $('#stBody').innerHTML =
+        '<div class="table-wrap"><table><thead><tr>' +
+        '<th>Name</th><th>Student no.</th><th>Program</th><th>Password</th><th>Last sign-in</th><th></th>' +
+        '</tr></thead><tbody>' +
+        res.items.map(function (s) {
+          var pw = s.hasOwnPassword
+            ? '<span class="badge green">set by student</span>'
+            : '<span class="mono tiny">' + esc(s.currentPassword || '—') + '</span>';
+          return '<tr>' +
+            '<td><b>' + esc(s.lastName + ', ' + s.firstName) + '</b>' +
+              (String(s.status).toLowerCase() === 'inactive' ? ' <span class="badge red">inactive</span>' : '') +
+              (s.middleName ? '<div class="tiny muted">' + esc(s.middleName) + '</div>' : '') + '</td>' +
+            '<td class="mono small">' + esc(s.id) + '</td>' +
+            '<td class="small">' + esc(s.program || '—') +
+              (s.yearLevel ? '<div class="tiny muted">Year ' + esc(s.yearLevel) + '</div>' : '') + '</td>' +
+            '<td>' + pw + '</td>' +
+            '<td class="tiny muted nowrap">' + esc(s.lastLogin || 'never') + '</td>' +
+            '<td class="right nowrap">' +
+              '<button class="btn sm" data-sedit="' + esc(s.id) + '">Edit</button> ' +
+              '<button class="btn sm ghost" data-sreset="' + esc(s.id) + '">Reset password</button>' +
+            '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        (pages > 1
+          ? '<div class="row" style="padding:12px 16px;border-top:1px solid var(--border)">' +
+            '<button class="btn sm" data-page="' + (S.studentPage - 1) + '"' +
+              (S.studentPage <= 1 ? ' disabled' : '') + '>← Previous</button>' +
+            '<div class="spacer"></div><span class="small muted">Page ' + S.studentPage + ' of ' + pages + '</span>' +
+            '<div class="spacer"></div>' +
+            '<button class="btn sm" data-page="' + (S.studentPage + 1) + '"' +
+              (S.studentPage >= pages ? ' disabled' : '') + '>Next →</button></div>'
+          : '');
+    })
+    .catch(function (err) {
+      $('#stBody').innerHTML = '<div class="alert error" style="margin:16px"><span class="ic">!</span><div>' +
+        esc(err.message) + '</div></div>';
+    });
+}
+
+function studentModal(s) {
+  var editing = !!s;
+  openModal({
+    title: editing ? 'Edit student' : 'Register a student',
+    body:
+      '<div class="field"><label>Student number</label><input type="text" id="sId" value="' +
+        esc(editing ? s.id : '') + '"' + (editing ? ' disabled' : '') + '>' +
+        (editing ? '' : '<span class="hint">This is what the student signs in with.</span>') + '</div>' +
+      '<div class="field"><label>E-mail</label><input type="email" id="sEmail" value="' +
+        esc(editing ? s.email : '') + '">' +
+        '<span class="hint">New starting passwords are e-mailed here automatically.</span></div>' +
+      '<div class="grid3">' +
+        '<div class="field"><label>Last name</label><input type="text" id="sLast" value="' +
+          esc(editing ? s.lastName : '') + '"></div>' +
+        '<div class="field"><label>First name</label><input type="text" id="sFirst" value="' +
+          esc(editing ? s.firstName : '') + '"></div>' +
+        '<div class="field"><label>Middle name</label><input type="text" id="sMid" value="' +
+          esc(editing ? s.middleName : '') + '"></div>' +
+      '</div>' +
+      '<div class="grid3">' +
+        '<div class="field"><label>Program</label><input type="text" id="sProg" value="' +
+          esc(editing ? s.program : '') + '"></div>' +
+        '<div class="field"><label>Year level</label><input type="text" id="sYear" value="' +
+          esc(editing ? s.yearLevel : '') + '"></div>' +
+        '<div class="field"><label>Status</label><select id="sStatus">' +
+          ['Active', 'Inactive'].map(function (v) {
+            return '<option' + (editing && String(s.status).toLowerCase() === v.toLowerCase() ? ' selected' : '') +
+              '>' + v + '</option>';
+          }).join('') + '</select></div>' +
+      '</div>' +
+      (editing ? '' :
+        '<div class="field"><label>Starting password</label><input type="text" id="sPw" ' +
+        'placeholder="leave blank for a random password"></div>') +
+      '<div id="sMsg"></div>',
+    footer:
+      (editing ? '<button class="btn danger" id="sDelete">Delete…</button><div class="spacer"></div>' : '') +
+      '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="sSave">' + (editing ? 'Save' : 'Register') + '</button>',
+    onMount: function (root, close) {
+      root.querySelector('#sSave').addEventListener('click', function () {
+        var btn = this;
+        var payload = {
+          id: editing ? s.id : root.querySelector('#sId').value.trim(),
+          lastName: root.querySelector('#sLast').value.trim(),
+          firstName: root.querySelector('#sFirst').value.trim(),
+          middleName: root.querySelector('#sMid').value.trim(),
+          program: root.querySelector('#sProg').value.trim(),
+          yearLevel: root.querySelector('#sYear').value.trim(),
+          email: root.querySelector('#sEmail').value.trim(),
+          status: root.querySelector('#sStatus').value
+        };
+        if (!editing) payload.password = root.querySelector('#sPw').value.trim();
+        busy(btn, true, 'Saving…');
+        call(editing ? 'admin.students.update' : 'admin.students.create', payload)
+          .then(function (res) {
+            close();
+            toast(editing ? 'Student updated.'
+              : 'Registered. Starting password: ' + (res.password || '') +
+                (res.emailed ? ' (e-mailed to the student)' : ''));
+            loadStudents();
+          })
+          .catch(function (err) {
+            busy(btn, false);
+            root.querySelector('#sMsg').innerHTML =
+              '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+          });
+      });
+
+      var del = root.querySelector('#sDelete');
+      if (del) del.addEventListener('click', function () {
+        confirmDialog('Delete this student?',
+          esc(s.lastName + ', ' + s.firstName) + ' (' + s.id + ') will be removed from the registry ' +
+          'and from every class they are in, together with the scores recorded there. ' +
+          'To keep the records but stop them signing in, set their status to Inactive instead.',
+          'Delete permanently', true).then(function (yes) {
+          if (!yes) return;
+          call('admin.students.delete', { id: s.id }).then(function (res) {
+            close();
+            toast('Removed from the registry and ' + res.classesCleared + ' class(es).');
+            loadStudents();
+          }).catch(function (err) { toast(err.message, 'error'); });
+        });
+      });
+    }
+  });
+}
+
+function resetPasswordModal(studentId) {
+  openModal({
+    title: 'Reset password',
+    body: '<p class="small">Set a new password for <b class="mono">' + esc(studentId) + '</b>. ' +
+      'They will be asked to change it the next time they sign in.</p>' +
+      '<div class="field"><label>New password</label><input type="text" id="rpPw" ' +
+      'placeholder="leave blank for a random password"></div><div id="rpMsg"></div>',
+    footer: '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="rpGo">Reset</button>',
+    onMount: function (root, close) {
+      root.querySelector('#rpGo').addEventListener('click', function () {
+        var btn = this;
+        busy(btn, true, 'Resetting…');
+        call('admin.students.resetPassword', {
+          studentId: studentId,
+          password: root.querySelector('#rpPw').value.trim()
+        }).then(function (res) {
+          close();
+          toast('Password for ' + res.studentId + ' is now: ' + res.password +
+            (res.emailed ? ' (e-mailed to the student)' : ''));
+          loadStudents();
+        }).catch(function (err) {
+          busy(btn, false);
+          root.querySelector('#rpMsg').innerHTML =
+            '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+        });
+      });
+    }
+  });
+}
+
+function importModal() {
+  openModal({
+    title: 'Import students',
+    wide: true,
+    body:
+      '<p class="small">Paste one student per line. Columns, separated by commas or tabs:</p>' +
+      '<div class="copybox">Student No., Last Name, First Name, Middle Name, Program, Year Level, E-mail</div>' +
+      '<p class="tiny faint" style="margin-top:8px">You can paste straight from Excel or Google Sheets. ' +
+      'Existing student numbers are updated instead of duplicated.</p>' +
+      '<div class="field" style="margin-top:14px"><label>Data</label>' +
+      '<textarea id="imText" style="min-height:180px" placeholder="21-123456, Dela Cruz, Juan, P, BSEE, 2, jdelacruz@mmsu.edu.ph"></textarea></div>' +
+      '<p class="tiny faint">Each new student gets their own random starting password, e-mailed to them when you include their e-mail.</p>' +
+      '<div id="imMsg"></div>',
+    footer: '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="imGo">Import</button>',
+    onMount: function (root, close) {
+      root.querySelector('#imGo').addEventListener('click', function () {
+        var btn = this;
+        busy(btn, true, 'Importing…');
+        call('admin.students.import', {
+          text: root.querySelector('#imText').value
+        }).then(function (res) {
+          close();
+          toast(res.added + ' added, ' + res.updated + ' updated, ' + (res.emailed || 0) + ' password e-mail(s) sent.');
+          loadStudents();
+        }).catch(function (err) {
+          busy(btn, false);
+          root.querySelector('#imMsg').innerHTML =
+            '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+        });
+      });
+    }
+  });
+}
+
+/* ------------------------------ subjects tab ----------------------------- */
+
+function renderSubjectsTab() {
+  var a = S.admin;
+  var html = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Subjects</h2>' +
+    '<div class="small muted">Courses you teach. A class pairs a subject with a section.</div></div>' +
+    '<div class="spacer"></div><button class="btn primary" id="subNew">+ New subject</button></div>';
+
+  if (!a.subjects.length) {
+    html += empty('No subjects yet', 'Add the subjects you handle, then create a class for each section.');
+  } else {
+    html += '<div class="card"><div class="table-wrap"><table><thead><tr>' +
+      '<th>Code</th><th>Title</th><th class="num">Units</th><th>Description</th><th></th>' +
+      '</tr></thead><tbody>' +
+      a.subjects.map(function (s) {
+        return '<tr><td><b>' + esc(s.code) + '</b></td><td>' + esc(s.title) + '</td>' +
+          '<td class="num">' + (s.units === null ? '—' : esc(s.units)) + '</td>' +
+          '<td class="small muted">' + esc(s.description || '—') + '</td>' +
+          '<td class="right"><button class="btn sm" data-subedit="' + esc(s.id) + '">Edit</button></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
+  setContent(html);
+  $('#subNew').addEventListener('click', function () { subjectModal(null); });
+  $('#content').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-subedit]');
+    if (b) subjectModal(a.subjects.filter(function (x) { return x.id === b.dataset.subedit; })[0]);
+  });
+}
+
+function subjectModal(s) {
+  var editing = !!s;
+  openModal({
+    title: editing ? 'Edit subject' : 'New subject',
+    body:
+      '<div class="grid2">' +
+        '<div class="field"><label>Code</label><input type="text" id="subCode" placeholder="IT 101" value="' +
+          esc(editing ? s.code : '') + '"></div>' +
+        '<div class="field"><label>Units</label><input type="number" step="any" id="subUnits" value="' +
+          esc(editing && s.units !== null ? s.units : '') + '"></div>' +
+      '</div>' +
+      '<div class="field"><label>Title</label><input type="text" id="subTitle" ' +
+        'placeholder="Introduction to Computing" value="' + esc(editing ? s.title : '') + '"></div>' +
+      '<div class="field"><label>Description</label><input type="text" id="subDesc" value="' +
+        esc(editing ? s.description : '') + '"></div><div id="subMsg"></div>',
+    footer:
+      (editing ? '<button class="btn danger" id="subDel">Delete</button><div class="spacer"></div>' : '') +
+      '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="subSave">' + (editing ? 'Save' : 'Add subject') + '</button>',
+    onMount: function (root, close) {
+      root.querySelector('#subSave').addEventListener('click', function () {
+        var btn = this;
+        busy(btn, true, 'Saving…');
+        call(editing ? 'admin.subject.update' : 'admin.subject.create', {
+          id: editing ? s.id : undefined,
+          code: root.querySelector('#subCode').value.trim(),
+          title: root.querySelector('#subTitle').value.trim(),
+          units: root.querySelector('#subUnits').value,
+          description: root.querySelector('#subDesc').value.trim()
+        }).then(function () { close(); toast('Saved.'); refreshAdmin(); })
+          .catch(function (err) {
+            busy(btn, false);
+            root.querySelector('#subMsg').innerHTML =
+              '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+          });
+      });
+      var del = root.querySelector('#subDel');
+      if (del) del.addEventListener('click', function () {
+        confirmDialog('Delete subject?', 'Only possible if no class uses it.', 'Delete', true)
+          .then(function (yes) {
+            if (!yes) return;
+            call('admin.subject.delete', { id: s.id })
+              .then(function () { close(); toast('Subject deleted.'); refreshAdmin(); })
+              .catch(function (err) { toast(err.message, 'error'); });
+          });
+      });
+    }
+  });
+}
+
+/* ----------------------------- semesters tab ----------------------------- */
+
+function renderSemestersTab() {
+  var a = S.admin;
+  var html = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Semesters</h2>' +
+    '<div class="small muted">Each semester is a folder in your Google Drive</div></div>' +
+    '<div class="spacer"></div><button class="btn primary" id="semNew">+ New semester</button></div>';
+
+  if (!a.semesters.length) {
+    html += empty('No semesters yet', 'Create one to get started — a Drive folder is made automatically.');
+  } else {
+    html += '<div class="card"><div class="table-wrap"><table><thead><tr>' +
+      '<th>Name</th><th>School year</th><th>Term</th><th>Folder</th><th></th>' +
+      '</tr></thead><tbody>' +
+      a.semesters.map(function (s) {
+        var current = s.id === a.settings.ACTIVE_SEMESTER_ID;
+        return '<tr><td><b>' + esc(s.name) + '</b>' +
+          (current ? ' <span class="badge green">current</span>' : '') +
+          (s.active ? '' : ' <span class="badge grey">closed</span>') + '</td>' +
+          '<td class="small">' + esc(s.schoolYear || '—') + '</td>' +
+          '<td class="small">' + esc(s.term || '—') + '</td>' +
+          '<td>' + (s.folderUrl ? '<a href="' + esc(s.folderUrl) +
+            '" target="_blank" rel="noopener" class="small">Open in Drive ↗</a>' : '—') + '</td>' +
+          '<td class="right nowrap">' +
+            (current ? '' : '<button class="btn sm" data-semcur="' + esc(s.id) + '">Make current</button> ') +
+            '<button class="btn sm ghost" data-semedit="' + esc(s.id) + '">Edit</button></td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  }
+  setContent(html);
+  $('#semNew').addEventListener('click', function () { semesterModal(null); });
+  $('#content').addEventListener('click', function (e) {
+    var cur = e.target.closest('[data-semcur]');
+    if (cur) {
+      call('admin.semester.update', { id: cur.dataset.semcur, makeCurrent: true })
+        .then(function () { toast('Current semester updated.'); refreshAdmin(cur.dataset.semcur); })
+        .catch(function (err) { toast(err.message, 'error'); });
+      return;
+    }
+    var ed = e.target.closest('[data-semedit]');
+    if (ed) semesterModal(a.semesters.filter(function (x) { return x.id === ed.dataset.semedit; })[0]);
+  });
+}
+
+function semesterModal(s) {
+  var editing = !!s;
+  openModal({
+    title: editing ? 'Edit semester' : 'New semester',
+    body:
+      '<div class="field"><label>Name</label><input type="text" id="smName" ' +
+        'placeholder="2026-2027 First Semester" value="' + esc(editing ? s.name : '') + '">' +
+        '<span class="hint">This becomes the folder name in Drive.</span></div>' +
+      '<div class="grid2">' +
+        '<div class="field"><label>School year</label><input type="text" id="smYear" ' +
+          'placeholder="2026-2027" value="' + esc(editing ? s.schoolYear : '') + '"></div>' +
+        '<div class="field"><label>Term</label><input type="text" id="smTerm" ' +
+          'placeholder="First Semester" value="' + esc(editing ? s.term : '') + '"></div>' +
+      '</div>' +
+      '<label class="checkline"><input type="checkbox" id="smActive"' +
+        (!editing || s.active ? ' checked' : '') + '> Open (students may view this semester)</label>' +
+      '<label class="checkline" style="margin-top:10px"><input type="checkbox" id="smCurrent"' +
+        (!editing ? ' checked' : '') + '> Make this the current semester</label>' +
+      '<div id="smMsg"></div>',
+    footer: '<button class="btn" data-close="1">Cancel</button>' +
+      '<button class="btn primary" id="smSave">' + (editing ? 'Save' : 'Create semester') + '</button>',
+    onMount: function (root, close) {
+      root.querySelector('#smSave').addEventListener('click', function () {
+        var btn = this;
+        busy(btn, true, 'Saving…');
+        call(editing ? 'admin.semester.update' : 'admin.semester.create', {
+          id: editing ? s.id : undefined,
+          name: root.querySelector('#smName').value.trim(),
+          schoolYear: root.querySelector('#smYear').value.trim(),
+          term: root.querySelector('#smTerm').value.trim(),
+          active: root.querySelector('#smActive').checked,
+          makeCurrent: root.querySelector('#smCurrent').checked
+        }).then(function (res) {
+          close();
+          toast(editing ? 'Semester updated.' : 'Semester created with its Drive folder.');
+          refreshAdmin(editing ? undefined : (res && res.id));
+        }).catch(function (err) {
+          busy(btn, false);
+          root.querySelector('#smMsg').innerHTML =
+            '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
+        });
+      });
+    }
+  });
+}
+
+/* ------------------------------ settings tab ----------------------------- */
+
+function renderSettingsTab() {
+  var a = S.admin;
+  var st = a.settings || {};
+  function isOn(k) { return String(st[k]).toUpperCase() === 'TRUE'; }
+
+  var html = '<h2 style="font-size:20px;margin-bottom:16px">Settings</h2>';
+
+  html += '<div class="card"><div class="card-head"><h3>Portal</h3></div><div class="card-body">' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Title</label><input type="text" id="cfgTitle" value="' +
+        esc(st.PORTAL_TITLE || '') + '"></div>' +
+      '<div class="field"><label>Subtitle</label><input type="text" id="cfgSub" value="' +
+        esc(st.PORTAL_SUBTITLE || '') + '"></div>' +
+    '</div>' +
+    '<div class="field"><label>Announcement for students</label>' +
+      '<input type="text" id="cfgAnn" placeholder="leave blank to hide" value="' +
+      esc(st.ANNOUNCEMENT || '') + '"></div>' +
+    '<div class="grid2">' +
+      '<div class="field"><label>Contact e-mail shown on the sign-in page</label>' +
+        '<input type="email" id="cfgContact" value="' + esc(st.CONTACT_EMAIL || '') + '"></div>' +
+      '<div class="field"><label>Default password for new students</label>' +
+        '<input type="text" id="cfgDefPw" value="' + esc(st.DEFAULT_PASSWORD || '') + '"></div>' +
+    '</div>' +
+    '<div class="stack" style="gap:10px;margin-top:6px">' +
+      '<label class="checkline"><input type="checkbox" id="cfgRun"' + (isOn('SHOW_RUNNING_GRADE') ? ' checked' : '') +
+        '> Show students their running grade and 1.00–5.00 equivalent</label>' +
+      '<label class="checkline"><input type="checkbox" id="cfgAve"' + (isOn('SHOW_CLASS_AVERAGE') ? ' checked' : '') +
+        '> Show students the class average for each requirement</label>' +
+      '<label class="checkline"><input type="checkbox" id="cfgChg"' + (isOn('ALLOW_PASSWORD_CHANGE') ? ' checked' : '') +
+        '> Let students change their own password</label>' +
+      '<label class="checkline"><input type="checkbox" id="cfgZero"' + (isOn('COUNT_BLANK_AS_ZERO') ? ' checked' : '') +
+        '> Count blank scores as zero (off = treated as “not yet recorded”)</label>' +
+    '</div>' +
+    '<div class="row" style="margin-top:16px"><button class="btn primary" id="cfgSave">Save settings</button></div>' +
+  '</div></div>';
+
+  html += '<div class="card"><div class="card-head"><h3>Grade equivalents</h3>' +
+    '<div class="spacer"></div><span class="small muted">Percentage → numeric grade</span></div>' +
+    '<div class="card-body"><div class="table-wrap"><table id="scaleTable"><thead><tr>' +
+    '<th class="num">Min %</th><th class="num">Max %</th><th class="num">Grade</th><th>Remark</th><th></th>' +
+    '</tr></thead><tbody>' +
+    (a.scale || []).map(scaleRowHtml).join('') +
+    '</tbody></table></div>' +
+    '<div class="row" style="margin-top:14px"><button class="btn sm" id="scaleAdd">+ Add row</button>' +
+    '<div class="spacer"></div><button class="btn primary" id="scaleSave">Save scale</button></div>' +
+  '</div></div>';
+
+  html += '<div class="card"><div class="card-head"><h3>Links &amp; tools</h3></div><div class="card-body">' +
+    '<dl class="kv" style="margin:0 0 16px">' +
+      '<dt>Portal link</dt><dd>' + (a.links.webApp
+        ? '<div class="copybox"><span class="grow">' + esc(a.links.webApp) + '</span>' +
+          '<button class="btn sm" id="copyUrl">Copy</button></div>'
+        : '<span class="muted">Deploy the web app to get the link.</span>') + '</dd>' +
+      '<dt>Master database</dt><dd>' + (a.links.master
+        ? '<a href="' + esc(a.links.master) + '" target="_blank" rel="noopener">Open the master spreadsheet ↗</a>'
+        : '—') + '</dd>' +
+    '</dl>' +
+    '<div class="row wrap">' +
+      '<button class="btn" id="toolPw">Apply pending passwords</button>' +
+      '<button class="btn" id="toolSync">Re-read every class list</button>' +
+    '</div>' +
+    '<p class="tiny faint" style="margin-top:12px">Run these after editing the master spreadsheet by hand — ' +
+    'the first turns newly typed passwords into stored ones, the second refreshes enrollment counts.</p>' +
+  '</div></div>';
+
+  html += '<p class="tiny faint" style="margin-top:18px">' + esc(S.portal ? S.portal.title : 'Electrical Engineering') +
+    ' · version ' + esc(a.version) + '</p>';
+
+  setContent(html);
+  bindSettings();
+}
+
+function scaleRowHtml(r) {
+  return '<tr>' +
+    '<td class="num"><input type="number" step="any" class="sc-min" value="' + esc(r.min) + '"></td>' +
+    '<td class="num"><input type="number" step="any" class="sc-max" value="' + esc(r.max) + '"></td>' +
+    '<td class="num"><input type="number" step="0.01" class="sc-grade" value="' + esc(r.grade) + '"></td>' +
+    '<td><input type="text" class="sc-remark" value="' + esc(r.remark || '') + '"></td>' +
+    '<td class="right"><button class="btn ghost sm" data-scdel="1">✕</button></td>' +
+  '</tr>';
+}
+
+function bindSettings() {
+  $('#cfgSave').addEventListener('click', function () {
+    var btn = this;
+    busy(btn, true, 'Saving…');
+    call('admin.settings.save', {
+      values: {
+        PORTAL_TITLE: $('#cfgTitle').value.trim(),
+        PORTAL_SUBTITLE: $('#cfgSub').value.trim(),
+        ANNOUNCEMENT: $('#cfgAnn').value.trim(),
+        CONTACT_EMAIL: $('#cfgContact').value.trim(),
+        DEFAULT_PASSWORD: $('#cfgDefPw').value.trim(),
+        SHOW_RUNNING_GRADE: $('#cfgRun').checked ? 'TRUE' : 'FALSE',
+        SHOW_CLASS_AVERAGE: $('#cfgAve').checked ? 'TRUE' : 'FALSE',
+        ALLOW_PASSWORD_CHANGE: $('#cfgChg').checked ? 'TRUE' : 'FALSE',
+        COUNT_BLANK_AS_ZERO: $('#cfgZero').checked ? 'TRUE' : 'FALSE'
+      }
+    }).then(function () {
+      busy(btn, false);
+      toast('Settings saved.');
+      return call('portal', {});
+    }).then(function (info) { S.portal = info; applyBranding(info); refreshAdmin(); })
+      .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+  });
+
+  $('#scaleAdd').addEventListener('click', function () {
+    var tbody = $('#scaleTable tbody');
+    var tr = document.createElement('tr');
+    tr.innerHTML = scaleRowHtml({ min: '', max: '', grade: '', remark: '' });
+    tbody.appendChild(tr.firstChild ? tr.firstChild : tr);
+    tbody.lastElementChild.querySelector('input').focus();
+  });
+
+  $('#scaleTable').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-scdel]');
+    if (b) b.closest('tr').remove();
+  });
+
+  $('#scaleSave').addEventListener('click', function () {
+    var btn = this;
+    var rows = $$('#scaleTable tbody tr').map(function (tr) {
+      return {
+        min: tr.querySelector('.sc-min').value,
+        max: tr.querySelector('.sc-max').value,
+        grade: tr.querySelector('.sc-grade').value,
+        remark: tr.querySelector('.sc-remark').value
+      };
+    });
+    busy(btn, true, 'Saving…');
+    call('admin.scale.save', { rows: rows })
+      .then(function (r) { busy(btn, false); toast(r.rows + ' bands saved.'); refreshAdmin(); })
+      .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+  });
+
+  var copy = $('#copyUrl');
+  if (copy) copy.addEventListener('click', function () {
+    var url = S.admin.links.webApp;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(function () { toast('Link copied.'); },
+        function () { toast('Could not copy — select the text instead.', 'warn'); });
+    } else {
+      toast('Select the link and copy it manually.', 'warn');
+    }
+  });
+
+  $('#toolPw').addEventListener('click', function () {
+    var btn = this; busy(btn, true, 'Applying…');
+    call('admin.tools.applyPasswords', {})
+      .then(function (r) { busy(btn, false); toast(r.students + ' student password(s) applied.'); })
+      .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+  });
+
+  $('#toolSync').addEventListener('click', function () {
+    var btn = this; busy(btn, true, 'Syncing…');
+    call('admin.tools.syncAll', { semesterId: S.admin.semesterId })
+      .then(function (r) {
+        busy(btn, false);
+        toast(r.synced + ' of ' + r.total + ' classes refreshed.');
+        refreshAdmin();
+      })
+      .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+  });
+}
+</script>

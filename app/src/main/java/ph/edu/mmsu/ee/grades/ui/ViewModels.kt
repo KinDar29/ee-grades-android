@@ -128,6 +128,18 @@ class LoginViewModel : ViewModel() {
     var portal by mutableStateOf<PortalInfo?>(null)
         private set
 
+    /** A green note after a successful password reset. */
+    var success by mutableStateOf<String?>(null)
+        private set
+
+    /** Called when the forgot-password screen finishes. */
+    fun onPasswordReset(forUser: String) {
+        username = forUser
+        password = ""
+        error = null
+        success = "Your password has been changed. Sign in with your new password."
+    }
+
     init {
         viewModelScope.launch {
             portal = try {
@@ -153,6 +165,7 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             busy = true
             error = null
+            success = null
             try {
                 onSuccess(repo.login(role, username.trim(), password))
             } catch (e: ApiException) {
@@ -199,6 +212,99 @@ class ChangePasswordViewModel : ViewModel() {
             try {
                 repo.changePassword(current, next)
                 onDone()
+            } catch (e: ApiException) {
+                error = e.message
+            } catch (e: OfflineException) {
+                error = e.message
+            } catch (e: Exception) {
+                error = "Something went wrong. Please try again."
+            } finally {
+                busy = false
+            }
+        }
+    }
+}
+
+/* ----------------------------- forgot password ---------------------------- */
+
+class ForgotPasswordViewModel : ViewModel() {
+
+    private val repo = ServiceLocator.repo
+
+    var username by mutableStateOf("")
+    var code by mutableStateOf("")
+    var next by mutableStateOf("")
+    var confirm by mutableStateOf("")
+
+    /** False while asking for the account; true once a code is (or may be) on its way. */
+    var codeStep by mutableStateOf(false)
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+    var info by mutableStateOf<String?>(null)
+        private set
+
+    private var prefilled = false
+
+    fun prefill(user: String) {
+        if (prefilled) return
+        prefilled = true
+        username = user
+    }
+
+    /** Clear everything so the next visit starts fresh. */
+    fun reset() {
+        prefilled = false
+        username = ""
+        code = ""
+        next = ""
+        confirm = ""
+        codeStep = false
+        error = null
+        info = null
+    }
+
+    fun haveCode() {
+        error = null
+        info = null
+        codeStep = true
+    }
+
+    fun sendCode(role: String) {
+        if (busy) return
+        if (username.isBlank()) {
+            error = if (role == "admin") "Enter your e-mail address." else "Enter your student number."
+            return
+        }
+        launchCall {
+            info = repo.requestPasswordReset(role, username.trim())
+            codeStep = true
+        }
+    }
+
+    fun submit(role: String, onDone: (String) -> Unit) {
+        if (busy) return
+        val cleanCode = code.filter { it.isDigit() }
+        when {
+            username.isBlank() -> { error = "Enter your account first."; return }
+            cleanCode.length != 6 -> { error = "Enter the 6-digit code from the e-mail."; return }
+            next != confirm -> { error = "The two new passwords do not match."; return }
+            next.length < 6 -> { error = "Your new password must be at least 6 characters."; return }
+        }
+        launchCall {
+            repo.resetPassword(role, username.trim(), cleanCode, next)
+            onDone(username.trim())
+        }
+    }
+
+    private fun launchCall(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            busy = true
+            error = null
+            try {
+                block()
             } catch (e: ApiException) {
                 error = e.message
             } catch (e: OfflineException) {

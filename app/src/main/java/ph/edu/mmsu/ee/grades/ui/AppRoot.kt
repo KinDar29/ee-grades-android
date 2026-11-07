@@ -1,6 +1,15 @@
 package ph.edu.mmsu.ee.grades.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import ph.edu.mmsu.ee.grades.ServiceLocator
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -51,6 +60,8 @@ private fun SignedInNav(app: AppViewModel) {
     val onAuthLost: (String?) -> Unit = { message ->
         app.signOut(message ?: "Your session has expired. Please sign in again.")
     }
+
+    if (profile != null && !isAdmin) NewScoreNotificationsSetup()
 
     NavHost(navController = nav, startDestination = Route.HOME) {
 
@@ -109,5 +120,29 @@ private fun SignedInNav(app: AppViewModel) {
                 onCancel = { nav.popBackStack() }
             )
         }
+    }
+}
+
+/**
+ * For students: ask once for permission to post "new score" notifications
+ * (Android 13+), and record which scores they already have so the first
+ * background check doesn't report all of them as new.
+ */
+@Composable
+private fun NewScoreNotificationsSetup() {
+    val context = LocalContext.current
+    val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
+    LaunchedEffect(Unit) {
+        val repo = ServiceLocator.repo
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED &&
+            !repo.askedForNotifications()
+        ) {
+            repo.markAskedForNotifications()
+            ask.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        repo.ensureScoreBaseline()
     }
 }

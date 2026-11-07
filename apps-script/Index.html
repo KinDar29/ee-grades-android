@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Styles'); ?>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===================== LOGIN ===================== -->
+  <div id="view-login" class="login-shell">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="mark">EE</div>
+        <h1 id="loginTitle"><?= portalTitle ?></h1>
+        <p id="loginSubtitle"><?= portalSubtitle ?></p>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <div id="loginNotice"></div>
+
+          <div class="segmented" id="roleSwitch">
+            <button type="button" data-role="student" class="on">Student</button>
+            <button type="button" data-role="admin">Administrator</button>
+          </div>
+
+          <form id="loginForm" autocomplete="on">
+            <div class="field">
+              <label for="loginUser" id="loginUserLabel">Student ID</label>
+              <input type="text" id="loginUser" name="username" autocomplete="username"
+                     placeholder="e.g. 21-123456" required>
+            </div>
+            <div class="field">
+              <label for="loginPass">Password</label>
+              <input type="password" id="loginPass" name="password"
+                     autocomplete="current-password" required>
+            </div>
+            <button class="btn primary block" type="submit" id="loginBtn">Sign in</button>
+          </form>
+          <p class="small center" style="margin:12px 0 0"><a href="#" id="forgotLink">Forgot password?</a></p>
+
+          <p class="small muted center" style="margin:16px 0 0" id="loginHelp"></p>
+        </div>
+      </div>
+
+      <p class="tiny faint center" style="margin-top:18px">
+        Department of Electrical Engineering
+      </p>
+    </div>
+  </div>
+
+  <!-- ===================== SIGNED-IN SHELL ===================== -->
+  <div id="view-app" class="hidden" style="display:flex;flex-direction:column;min-height:100vh">
+    <div class="topbar">
+      <div class="brand">
+        <div class="mark">EE</div>
+        <div class="titles">
+          <div class="t1" id="barTitle">Electrical Engineering</div>
+          <div class="t2" id="barSubtitle">Student Grades Portal</div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="who">
+        <div class="n" id="barName">—</div>
+        <div class="r" id="barRole">—</div>
+      </div>
+      <button class="btn sm ghost" style="color:#fff;border-color:rgba(255,255,255,.28)"
+              id="btnAccount" type="button">Account</button>
+      <button class="btn sm ghost" style="color:#fff;border-color:rgba(255,255,255,.28)"
+              id="btnSignOut" type="button">Sign out</button>
+    </div>
+
+    <div class="tabbar hidden" id="adminTabs">
+      <button data-tab="classes" class="on">Classes</button>
+      <button data-tab="students">Students</button>
+      <button data-tab="subjects">Subjects</button>
+      <button data-tab="semesters">Semesters</button>
+      <button data-tab="settings">Settings</button>
+    </div>
+
+    <main>
+      <div class="wrap" id="content">
+        <div class="loading"><span class="spinner"></span> Loading…</div>
+      </div>
+    </main>
+  </div>
+
+</div>
+
+<div id="modalRoot"></div>
+<div id="toasts"></div>
+
+<?!= include('App'); ?>
+</body>
+</html>

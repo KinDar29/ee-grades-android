@@ -13,8 +13,8 @@ android {
         applicationId = "ph.edu.mmsu.ee.grades"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         // ---------------------------------------------------------------
         // The only line you must edit before the app will talk to anything.
@@ -28,17 +28,38 @@ android {
         )
     }
 
+    // The permanent release key lives in GitHub secrets, never in the repo.
+    // The release workflow decodes it to a temp file and points EE_KEYSTORE_PATH
+    // at it. Without it (local builds), release builds come out unsigned.
+    val releaseKeystore = System.getenv("EE_KEYSTORE_PATH")
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("EE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("EE_KEY_ALIAS")
+                keyPassword = System.getenv("EE_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            // Test builds install next to the real app instead of clashing with it.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Minification stays off: the release is the same code that was
+            // tested as a debug build, just signed with the permanent key.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -81,4 +102,5 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.androidx.work.runtime.ktx)
 }
