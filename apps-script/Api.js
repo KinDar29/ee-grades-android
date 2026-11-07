@@ -137,6 +137,8 @@ function route_(action, p, token) {
       return rebuildSummary_(requireSession_(token, 'admin'), p.sectionId);
     case 'admin.export.pdf':
       return exportClassRecordPdf_(requireSession_(token, 'admin'), p);
+    case 'admin.section.status':
+      return setFinalStatus_(requireSession_(token, 'admin'), p.sectionId, p.studentId, p.status);
 
     case 'admin.students.list':
       requireSession_(token, 'admin');
@@ -387,7 +389,9 @@ function adminSectionData_(session, sectionId) {
       lastName: r.lastName,
       firstName: r.firstName,
       scores: r.scores,
-      grade: g
+      grade: g,
+      finalStatus: r.finalStatus || '',
+      standing: standingOf_(g, r.finalStatus)
     };
   });
 

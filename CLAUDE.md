@@ -51,6 +51,18 @@ change log at the bottom for every change you ship.
   state — the browser (localStorage `ee.seen.<id>`) and the app (DataStore
   `scores.notified`) compare against what they showed last. First check only
   records a baseline.
+- `SummaryOfGrades.js` — admin-only VPAA-TEMP-004 "Summary of Grades" (.docx):
+  ONE file per semester listing every subject taught that semester (one row per
+  faculty + subject + course + year; sections combined), rebuilt with every
+  class record export. Fills the university's own
+  template from `Templates/` in the root Drive folder by editing only
+  `word/document.xml` (semester line, data rows, signature names) — never
+  change the template's layout. Chair/Dean names: Settings
+  `SUMMARY_CHAIR_NAME` / `SUMMARY_DEAN_NAME` (blank keeps the template's).
+- Standings (`standingOf_` in `Sections.js`), shared by the class record and
+  the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
+  scores). INC/Dropped are set per student in the admin gradebook and stored in
+  each class sheet's "Final Status" tab.
 - `Export.js` — printable PDF class record. `Setup.js` — `setUp()`,
   `installTriggers()`. `Triggers.js` — hourly `scheduledRosterSync`.
 - `Utils.js` — sheet helpers, `withLock_` (re-entrant script lock), settings,
@@ -142,4 +154,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   released).
 - **2026-11-07** — Releases now publish automatically when `main` gets a
   versionName without a Release (tag pushes are blocked from Claude sessions).
-  Merged PR #1; v1.2.0 released from the merge.
+  Merged PR #1. v1.2.0 is NOT released yet: the release run stops until the
+  three signing secrets are added to the repo (see "Releasing").
+- **2026-11-07** — Portal deployment version 14. Summary of Grades (admin):
+  one per semester covering every subject (`makeSummaryOfGrades()` builds it
+  from the editor too), generated with every class record export, from the VPAA-TEMP-004
+  template; INC/Dropped per student
+  ("Final Status" tab); 4.00 now shows as CONDITIONAL (was FAILED) in the class
+  record, which also gained Conditional/INC/Dropped counts.

@@ -70,8 +70,12 @@ var STAB = {
   INFO: 'Info',
   ASSESSMENTS: 'Assessments',
   GRADES: 'Grades',
-  SUMMARY: 'Summary'
+  SUMMARY: 'Summary',
+  STATUS: 'Final Status'
 };
+
+/** Standings an admin sets by hand; everything else comes from the grade. */
+var FINAL_STATUSES = ['INC', 'Dropped'];
 
 /**
  * Column headers for each master tab.
@@ -143,7 +147,10 @@ var DEFAULT_SETTINGS = [
   ['COUNT_BLANK_AS_ZERO', 'FALSE', 'FALSE = blank scores are treated as "not yet recorded". TRUE = blanks count as zero.'],
   ['ALLOW_PASSWORD_CHANGE', 'TRUE', 'TRUE = students may change their own password.'],
   ['DEFAULT_PASSWORD', 'ee2026', 'Password used for a student whose "Set Password" cell is blank and who has never logged in.'],
-  ['ACTIVE_SEMESTER_ID', '', 'Semester opened by default. Managed from the admin dashboard.']
+  ['ACTIVE_SEMESTER_ID', '', 'Semester opened by default. Managed from the admin dashboard.'],
+  ['SUMMARY_CHAIR_NAME', '', 'Program Coordinator / Department Chair printed on the Summary of Grades. Blank = keep the name in the template.'],
+  ['SUMMARY_DEAN_NAME', '', 'Dean printed on the Summary of Grades. Blank = keep the name in the template.'],
+  ['SUMMARY_TEMPLATE_ID', '', 'Drive file ID of the Summary of Grades .docx template. Blank = use the file in the Templates folder.']
 ];
 
 /**
