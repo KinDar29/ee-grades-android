@@ -170,7 +170,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   template; INC/Dropped per student
   ("Final Status" tab); 4.00 now shows as CONDITIONAL (was FAILED) in the class
   record, which also gained Conditional/INC/Dropped counts.
-- **2026-11-07** — Indirect assessment: survey link on the student class page
+- **2026-11-07** — Portal deployment version 15. Indirect assessment: survey link on the student class page
   with submitted status; admin "Indirect assessment" dashboard (response rates by
   section, CO self-ratings, indirect vs direct ≥ 70%, lowest/highest statements,
   who hasn't answered) read from the Course Outcome Assessment Workbook.
