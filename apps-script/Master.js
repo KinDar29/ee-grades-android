@@ -165,8 +165,17 @@ function sectionRowToObject_(r, subjectsById, semestersById) {
     spreadsheetId: str_(r['Spreadsheet ID']),
     spreadsheetUrl: str_(r['Spreadsheet URL']),
     enrolled: num_(r['Enrolled']) || 0,
-    lastSynced: str_(r['Last Synced'])
+    lastSynced: str_(r['Last Synced']),
+    surveyUrl: str_(r['Survey Link']),
+    workbookId: workbookId_(r['Assessment Workbook'])
   };
+}
+
+/** Blank, or an https:// link (the survey is opened in a new tab by students). */
+function checkSurveyUrl_(v) {
+  var s = str_(v);
+  if (s && !/^https:\/\/\S+$/i.test(s)) throw new Error('The survey link must be a full https:// address.');
+  return s;
 }
 
 function indexBy_(list, key) {
@@ -247,6 +256,8 @@ function createSection_(session, data) {
       'Instructor': str_(data.instructor),
       'Schedule': str_(data.schedule),
       'Room': str_(data.room),
+      'Survey Link': checkSurveyUrl_(data.surveyUrl),
+      'Assessment Workbook': workbookId_(data.workbook),
       'Status': 'Active',
       'Spreadsheet ID': ss.getId(),
       'Spreadsheet URL': ss.getUrl(),
@@ -272,7 +283,12 @@ function updateSection_(session, data) {
         if (data[parts[0]] !== undefined) patch[parts[1]] = str_(data[parts[0]]);
       });
     if (data.subjectId !== undefined && str_(data.subjectId)) patch['Subject ID'] = str_(data.subjectId);
+    if (data.surveyUrl !== undefined) patch['Survey Link'] = checkSurveyUrl_(data.surveyUrl);
+    if (data.workbook !== undefined) patch['Assessment Workbook'] = workbookId_(data.workbook);
     updateObject_(sheet, row._row, patch);
+    if (patch['Assessment Workbook']) {
+      try { CacheService.getScriptCache().remove('indirect:' + patch['Assessment Workbook']); } catch (err) { /* ignore */ }
+    }
 
     // Keep the spreadsheet name and Info tab in step.
     try {

@@ -612,6 +612,20 @@ function renderStudentClass(sectionId) {
       '</div>' +
     '</div></div>';
 
+    if (d.survey && d.survey.url) {
+      var done = d.survey.submitted === true;
+      html += '<div class="card"><div class="card-body"><div class="row wrap" style="gap:12px">' +
+        '<div style="flex:1;min-width:220px"><h3 style="font-size:15px;margin:0 0 4px">Course outcome self-assessment</h3>' +
+        '<div class="small muted">' + (done
+          ? 'Thank you, your response is recorded. You may answer again; only your latest answers count.'
+          : 'Rate how well you can do each course outcome of this class. Use your student number on the form.') +
+        '</div></div>' +
+        (done ? '<span class="badge green">✓ Submitted</span>' : '') +
+        '<a class="btn' + (done ? '' : ' primary') + '" target="_blank" rel="noopener" href="' + esc(d.survey.url) + '">' +
+          (done ? 'Open the survey again ↗' : 'Answer the survey ↗') + '</a>' +
+      '</div></div></div>';
+    }
+
     if (d.showRunningGrade) {
       html += '<div class="card"><div class="card-body">' +
         '<div class="grade-hero">' +
@@ -721,6 +735,7 @@ function refreshAdmin(semesterId) {
 
 function drawAdminTab() {
   if (S.tab === 'classes') renderClassesTab();
+  else if (S.tab === 'indirect') renderIndirectTab();
   else if (S.tab === 'students') renderStudentsTab();
   else if (S.tab === 'subjects') renderSubjectsTab();
   else if (S.tab === 'semesters') renderSemestersTab();
@@ -740,6 +755,135 @@ function semesterPicker() {
 function bindSemesterPicker() {
   var p = $('#admSem');
   if (p) p.addEventListener('change', function () { refreshAdmin(this.value); });
+}
+
+/* --------------------------- indirect assessment --------------------------- */
+
+function meter(value, kind) {
+  if (value === null || value === undefined) return '<span class="muted">—</span>';
+  var v = Math.max(0, Math.min(100, Number(value)));
+  return '<div class="meter-row"><div class="meter' + (kind ? ' ' + kind : '') + '"><i style="width:' + v + '%"></i></div>' +
+    '<span class="v small">' + fmt(value, 0) + '%</span></div>';
+}
+
+function renderIndirectTab(refresh) {
+  loading(refresh === true ? 'Re-reading the assessment workbook…' : 'Reading the assessment workbook…');
+  call(refresh === true ? 'admin.indirect.refresh' : 'admin.indirect', { semesterId: S.admin ? S.admin.semesterId : '' })
+    .then(drawIndirectTab)
+    .catch(function (err) {
+      setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+    });
+}
+
+function drawIndirectTab(r) {
+  var html = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Indirect assessment</h2>' +
+    '<div class="small muted">Students’ self-ratings of the course outcomes, from each class’s survey. ' +
+    'Read from the course outcome assessment workbook · ' + esc(r.checkedAt) + '</div></div>' +
+    '<div class="spacer"></div>' + semesterPicker() +
+    '<button class="btn" id="indRefresh">↻ Refresh</button></div>';
+
+  if (!r.blocks.length) {
+    html += empty('No survey linked yet',
+      'Open Classes, click Edit on a class, and paste the Google Form link and the course outcome assessment workbook link.');
+  }
+
+  r.blocks.forEach(function (b) {
+    var enrolled = b.sections.reduce(function (n, s) { return n + s.enrolled; }, 0);
+    var answered = b.sections.reduce(function (n, s) { return n + s.answered; }, 0);
+    var d = b.data;
+    html += '<div class="card"><div class="card-head"><h3>' + esc(b.subject) + '</h3><div class="spacer"></div>' +
+      (b.surveyUrl ? '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(b.surveyUrl) + '">Open the form ↗</a> ' +
+        '<button class="btn sm" data-copy="' + esc(b.surveyUrl) + '">Copy student link</button> ' : '') +
+      (b.workbookUrl ? '<a class="btn sm ghost" target="_blank" rel="noopener" href="' + esc(b.workbookUrl) + '">Workbook ↗</a>' : '') +
+      '</div><div class="card-body">';
+
+    if (b.error) {
+      html += '<div class="alert warn"><span class="ic">!</span><div>' + esc(b.error) + '</div></div>';
+    }
+
+    var rate = enrolled ? Math.round(answered / enrolled * 100) : 0;
+    html += '<div class="stat-row" style="margin-bottom:18px">' +
+      '<div class="stat"><div class="v">' + answered + ' / ' + enrolled + '</div><div class="k">Students answered (' + rate + '%)</div></div>' +
+      (d && d.overall
+        ? '<div class="stat"><div class="v">' + (d.overall.indirect === null ? '—' : fmt(d.overall.indirect, 0) + '%') +
+          '</div><div class="k">Rate themselves ≥ 70% overall</div></div>' +
+          '<div class="stat"><div class="v">' + (d.overall.direct === null ? '—' : fmt(d.overall.direct, 0) + '%') +
+          '</div><div class="k">Reached 70% on assessments (direct)</div></div>'
+        : '') +
+    '</div>';
+
+    html += '<h4 style="margin:0 0 8px">Responses by section</h4><div class="table-wrap" style="margin-bottom:18px"><table>' +
+      '<thead><tr><th>Section</th><th class="num">Answered</th><th style="width:45%">Response rate</th></tr></thead><tbody>' +
+      b.sections.map(function (s) {
+        return '<tr><td>' + esc(s.name) + '</td><td class="num">' + s.answered + ' / ' + s.enrolled + '</td><td>' +
+          meter(s.enrolled ? s.answered / s.enrolled * 100 : 0) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+
+    if (d) {
+      html += '<h4 style="margin:0 0 4px">Course outcomes</h4>' +
+        '<p class="tiny faint" style="margin:0 0 8px"><span style="color:var(--green-600)">■</span> students rating themselves at least 70% (indirect) · ' +
+        '<span style="color:var(--gold-500)">■</span> students reaching 70% on assessments (direct). ' +
+        'A positive gap means students rate themselves higher than their results show.</p>' +
+        '<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr>' +
+        '<th>CO</th><th class="num hide-sm">Weight</th><th class="num">Avg rating</th>' +
+        '<th style="width:24%">Indirect ≥ 70%</th><th style="width:24%">Direct ≥ 70%</th><th class="num">Gap</th>' +
+        '</tr></thead><tbody>' +
+        d.cos.map(function (c) {
+          var gap = c.gap === null ? '—'
+            : '<span class="badge ' + (Math.abs(c.gap) >= 20 ? 'red' : (Math.abs(c.gap) >= 10 ? 'gold' : 'grey')) + '">' +
+              (c.gap > 0 ? '+' : '') + fmt(c.gap, 0) + '</span>';
+          return '<tr><td><b>' + esc(c.co) + '</b>' + (c.description ? '<div class="tiny muted">' + esc(c.description) + '</div>' : '') + '</td>' +
+            '<td class="num hide-sm">' + (c.weight === null ? '—' : fmt(c.weight, 1) + '%') + '</td>' +
+            '<td class="num">' + (c.averageRating === null ? '—' : fmt(c.averageRating, 2) + ' / 5') + '</td>' +
+            '<td>' + meter(c.indirect) + '<div class="tiny muted">' + c.atLeast70 + ' of ' + c.answered + '</div></td>' +
+            '<td>' + meter(c.direct, 'direct') + '</td>' +
+            '<td class="num">' + gap + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+
+      var rated = (d.statements || []).filter(function (s) { return s.average !== null; });
+      if (rated.length) {
+        var sorted = rated.slice().sort(function (a, b2) { return a.average - b2.average; });
+        var row = function (s) {
+          return '<tr><td><span class="badge">' + esc(s.co) + '</span></td><td class="small">' + esc(s.text) + '</td>' +
+            '<td class="num"><b>' + fmt(s.average, 2) + '</b></td><td class="num muted small">' + s.answered + '</td></tr>';
+        };
+        html += '<div class="grid2"><div><h4 style="margin:0 0 8px">Lowest-rated statements</h4><div class="table-wrap"><table>' +
+          '<thead><tr><th>CO</th><th>Statement</th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
+          sorted.slice(0, 5).map(row).join('') + '</tbody></table></div></div>' +
+          '<div><h4 style="margin:0 0 8px">Highest-rated statements</h4><div class="table-wrap"><table>' +
+          '<thead><tr><th>CO</th><th>Statement</th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
+          sorted.slice(-3).reverse().map(row).join('') + '</tbody></table></div></div></div>';
+      } else {
+        html += '<p class="small muted">No survey responses yet. Share the student link; results appear here within a few minutes of each response.</p>';
+      }
+
+      var students = d.students || [];
+      var waiting = students.filter(function (s) { return !s.submitted; });
+      if (waiting.length && students.length) {
+        html += '<details style="margin-top:16px"><summary class="small"><b>' + waiting.length +
+          '</b> student(s) haven’t answered yet</summary><div class="small" style="columns:2;margin-top:8px">' +
+          waiting.map(function (s) { return esc(s.name) + (s.section ? ' <span class="muted">(' + esc(s.section) + ')</span>' : ''); }).join('<br>') +
+          '</div></details>';
+      }
+    }
+    html += '</div></div>';
+  });
+
+  setContent(html);
+  bindSemesterPicker();
+  $('#indRefresh').addEventListener('click', function () { renderIndirectTab(true); });
+  $$('[data-copy]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var text = this.dataset.copy;
+      var ok = function () { toast('Student link copied.'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(ok, function () { window.prompt('Copy the link:', text); });
+      } else {
+        window.prompt('Copy the link:', text);
+      }
+    });
+  });
 }
 
 /* ------------------------------ classes tab ------------------------------ */
@@ -823,6 +967,14 @@ function sectionModal(section) {
       '</div>' +
       '<div class="field"><label>Schedule</label><input type="text" id="fSchedule" ' +
         'placeholder="MWF 8:00–9:00 AM" value="' + esc(editing ? section.schedule : '') + '"></div>' +
+      '<div class="field"><label>Self-assessment survey link (Google Form)</label>' +
+        '<input type="url" id="fSurvey" placeholder="https://forms.gle/…" value="' +
+        esc(editing ? section.surveyUrl || '' : '') + '">' +
+        '<span class="hint">Students in this class see an “Answer the survey” button.</span></div>' +
+      '<div class="field"><label>Course outcome assessment workbook</label>' +
+        '<input type="text" id="fWorkbook" placeholder="Google Sheets link" value="' +
+        esc(editing && section.workbookId ? 'https://docs.google.com/spreadsheets/d/' + section.workbookId + '/edit' : '') + '">' +
+        '<span class="hint">Read (never changed) for the Indirect assessment dashboard.</span></div>' +
       (editing
         ? '<div class="field"><label>Status</label><select id="fStatus">' +
           ['Active', 'Archived'].map(function (v) {
@@ -845,7 +997,9 @@ function sectionModal(section) {
           name: root.querySelector('#fName').value.trim(),
           instructor: root.querySelector('#fInstructor').value.trim(),
           room: root.querySelector('#fRoom').value.trim(),
-          schedule: root.querySelector('#fSchedule').value.trim()
+          schedule: root.querySelector('#fSchedule').value.trim(),
+          surveyUrl: root.querySelector('#fSurvey').value.trim(),
+          workbook: root.querySelector('#fWorkbook').value.trim()
         };
         if (editing) payload.status = root.querySelector('#fStatus').value;
         busy(btn, true, editing ? 'Saving…' : 'Creating…');

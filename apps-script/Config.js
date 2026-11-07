@@ -103,7 +103,7 @@ SCHEMA[TAB.SUBJECTS] = [
 SCHEMA[TAB.SECTIONS] = [
   'Section ID', 'Section Name', 'Subject ID', 'Semester ID', 'Instructor',
   'Schedule', 'Room', 'Status', 'Spreadsheet ID', 'Spreadsheet URL',
-  'Enrolled', 'Last Synced', 'Created At'
+  'Enrolled', 'Last Synced', 'Created At', 'Survey Link', 'Assessment Workbook'
 ];
 
 SCHEMA[TAB.ENROLLMENTS] = [

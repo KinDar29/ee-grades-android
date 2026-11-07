@@ -288,6 +288,12 @@ textarea { resize: vertical; min-height: 100px; font-family: var(--mono); font-s
 .badge.gold { background: var(--gold-100); color: var(--gold-600); border-color: transparent; }
 .badge.red { background: var(--danger-bg); color: var(--danger); border-color: transparent; }
 .badge.grey { background: var(--surface-2); }
+.meter { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; min-width: 80px; }
+.meter > i { display: block; height: 100%; background: var(--green-600); border-radius: 4px; }
+.meter.direct > i { background: var(--gold-500); }
+.meter-row { display: flex; align-items: center; gap: 8px; }
+.meter-row .meter { flex: 1; }
+.meter-row .v { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
 .badge.new { background: var(--gold-100); color: var(--gold-600); border-color: transparent; font-weight: 700; }
 .class-card .badge.new { margin-top: 6px; align-self: flex-start; }
 

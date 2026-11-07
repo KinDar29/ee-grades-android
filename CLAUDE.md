@@ -59,6 +59,14 @@ change log at the bottom for every change you ship.
   `word/document.xml` (semester line, data rows, signature names) — never
   change the template's layout. Chair/Dean names: Settings
   `SUMMARY_CHAIR_NAME` / `SUMMARY_DEAN_NAME` (blank keeps the template's).
+- `IndirectAssessment.js` — course-outcome self-assessment survey. Each class
+  can have a "Survey Link" (Google Form, shown to students as "Answer the
+  survey" with a ✓ once their student number appears in the responses) and an
+  "Assessment Workbook" (Sections tab columns, editable in Edit class). The
+  admin "Indirect assessment" tab READS the workbook (never writes) — tabs
+  Indirect Assessment, Survey Responses, Comparison, Survey Items, found by
+  their labels — cached 5 min (↻ Refresh clears it). `checkIndirectAssessment()`
+  logs the same data from the editor.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -162,3 +170,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   template; INC/Dropped per student
   ("Final Status" tab); 4.00 now shows as CONDITIONAL (was FAILED) in the class
   record, which also gained Conditional/INC/Dropped counts.
+- **2026-11-07** — Indirect assessment: survey link on the student class page
+  with submitted status; admin "Indirect assessment" dashboard (response rates by
+  section, CO self-ratings, indirect vs direct ≥ 70%, lowest/highest statements,
+  who hasn't answered) read from the Course Outcome Assessment Workbook.
