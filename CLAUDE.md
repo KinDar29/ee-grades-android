@@ -51,9 +51,10 @@ change log at the bottom for every change you ship.
   state — the browser (localStorage `ee.seen.<id>`) and the app (DataStore
   `scores.notified`) compare against what they showed last. First check only
   records a baseline.
-- `SummaryOfGrades.js` — admin-only VPAA-TEMP-004 "Summary of Grades" (.docx),
-  built with every class record export for that faculty member's classes in the
-  semester (one row per subject + course + year). Fills the university's own
+- `SummaryOfGrades.js` — admin-only VPAA-TEMP-004 "Summary of Grades" (.docx):
+  ONE file per semester listing every subject taught that semester (one row per
+  faculty + subject + course + year; sections combined), rebuilt with every
+  class record export. Fills the university's own
   template from `Templates/` in the root Drive folder by editing only
   `word/document.xml` (semester line, data rows, signature names) — never
   change the template's layout. Chair/Dean names: Settings
@@ -155,7 +156,8 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   versionName without a Release (tag pushes are blocked from Claude sessions).
   Merged PR #1. v1.2.0 is NOT released yet: the release run stops until the
   three signing secrets are added to the repo (see "Releasing").
-- **2026-11-07** — Summary of Grades (admin): generated with every class
-  record export, from the VPAA-TEMP-004 template; INC/Dropped per student
+- **2026-11-07** — Summary of Grades (admin): one per semester covering every
+  subject, generated with every class record export, from the VPAA-TEMP-004
+  template; INC/Dropped per student
   ("Final Status" tab); 4.00 now shows as CONDITIONAL (was FAILED) in the class
   record, which also gained Conditional/INC/Dropped counts.

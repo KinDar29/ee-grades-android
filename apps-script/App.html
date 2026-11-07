@@ -973,7 +973,7 @@ function summaryOfGradesHtml(sog) {
   }
   var rows = sog.rows || [];
   html += '<p class="small" style="margin-bottom:10px">' + esc(sog.faculty) + ' · ' + esc(sog.semester) + ' · ' +
-    rows.length + (rows.length === 1 ? ' row' : ' rows') + ' (every class this faculty handles this semester).</p>' +
+    rows.length + (rows.length === 1 ? ' row' : ' rows') + ' — one summary for every subject this semester.</p>' +
     '<div class="table-wrap" style="margin-bottom:12px"><table><thead><tr>' +
     '<th>Subject</th><th>Course</th><th class="num">Yr</th><th class="num">Total</th><th class="num">Passed</th>' +
     '<th class="num">Drop</th><th class="num">INC</th><th class="num">4</th><th class="num">Failed</th></tr></thead><tbody>' +

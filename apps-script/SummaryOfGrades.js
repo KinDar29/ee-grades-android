@@ -3,8 +3,8 @@
  *  SummaryOfGrades.js  ·  VPAA-TEMP-004 "Summary of Grades" (admin only)
  * ============================================================================
  *  Fills the university's own Word template — kept in the portal's Drive
- *  folder under Templates/ — for one faculty member and one semester, one row
- *  per subject + course + year. Only the contents change: the semester line,
+ *  folder under Templates/ — with ONE summary per semester covering every
+ *  subject taught that semester, one row per subject + course + year. Only the contents change: the semester line,
  *  the data rows and the three signature names. Header, logo, borders, fonts,
  *  column widths and footer are copied byte for byte from the template.
  *
@@ -28,14 +28,11 @@ var SUMMARY = {
 /* --------------------------------- data ---------------------------------- */
 
 /**
- * Rows for one faculty member in one semester. Sections of the same subject,
- * course and year are combined into one row, because the form has no
- * section column.
+ * Rows for every class in one semester. Sections of the same faculty,
+ * subject, course and year are combined into one row, because the form has
+ * no section column.
  */
-function summaryOfGradesData_(instructor, semesterId) {
-  var who = str_(instructor);
-  if (!who) throw new Error('This class has no instructor set. Add one in the class settings first.');
-  var key = who.replace(/\s+/g, ' ').toLowerCase();
+function summaryOfGradesData_(semesterId) {
 
   var registry = {};
   readTable_(tab_(TAB.STUDENTS)).rows.forEach(function (r) {
@@ -46,10 +43,15 @@ function summaryOfGradesData_(instructor, semesterId) {
   });
 
   var sections = listSections_(semesterId).filter(function (s) {
-    return str_(s.instructor).replace(/\s+/g, ' ').toLowerCase() === key &&
-      str_(s.status).toLowerCase() !== 'archived';
+    return str_(s.status).toLowerCase() !== 'archived';
   });
-  if (!sections.length) throw new Error('No classes found for ' + who + ' this semester.');
+  if (!sections.length) throw new Error('There are no classes in this semester yet.');
+  sections.sort(function (a, b) {
+    var ka = (str_(a.instructor) + '|' + a.subjectCode + '|' + a.name).toLowerCase();
+    var kb = (str_(b.instructor) + '|' + b.subjectCode + '|' + b.name).toLowerCase();
+    return ka > kb ? 1 : (ka < kb ? -1 : 0);
+  });
+  var facultyNames = [];
 
   var groups = {};
   var order = [];
@@ -63,10 +65,14 @@ function summaryOfGradesData_(instructor, semesterId) {
       return (String(y || '').match(/\d/) || [''])[0];
     })) || (sec.name.match(/\d/) || [''])[0];
 
+    var faculty = str_(sec.instructor).replace(/\s+/g, ' ');
+    if (faculty && !facultyNames.some(function (f) { return f.toLowerCase() === faculty.toLowerCase(); })) {
+      facultyNames.push(faculty);
+    }
     var subject = [sec.subjectCode, sec.subjectTitle].filter(String).join(' - ');
-    var k = [subject, course, year].join('|').toLowerCase();
+    var k = [faculty, subject, course, year].join('|').toLowerCase();
     if (!groups[k]) {
-      groups[k] = { subject: subject, course: course, year: year, sections: [],
+      groups[k] = { faculty: faculty, subject: subject, course: course, year: year, sections: [],
         total: 0, passed: 0, dropped: 0, inc: 0, four: 0, failed: 0, none: 0 };
       order.push(k);
     }
@@ -88,10 +94,12 @@ function summaryOfGradesData_(instructor, semesterId) {
   return {
     semesterLine: semesterLine_(semester),
     semesterName: semester ? str_(semester['Name']) : '',
-    facultyName: who,
+    // One faculty member signs; if several taught this semester, all are named.
+    facultyName: facultyNames.join(' / '),
     rows: order.map(function (k) {
       var g = groups[k];
       return {
+        faculty: g.faculty,
         subject: g.subject, course: g.course, year: g.year, sections: g.sections,
         total: g.total, passed: g.passed, dropped: g.dropped, inc: g.inc,
         four: g.four, failed: g.failed,
@@ -181,7 +189,8 @@ function fillRow_(rowXml, values) {
 /**
  * Pure string work, no Google services, so it can be tested anywhere.
  * d = { semesterLine, facultyName, chairName, deanName,
- *       rows: [{ subject, course, year, total, passed, dropped, inc, four, failed, remarks }] }
+ *       rows: [{ faculty, subject, course, year, total, passed, dropped, inc, four, failed, remarks }] }
+ * The faculty name is written on the first row of each faculty's block.
  */
 function fillSummaryXml_(xml, d) {
   if (!d.rows || !d.rows.length) throw new Error('There is nothing to put in the Summary of Grades.');
@@ -202,8 +211,10 @@ function fillSummaryXml_(xml, d) {
   var at = xml.indexOf(first + next);
   if (at < 0) throw new Error('Template check failed: the two sample rows are not next to each other.');
   var built = d.rows.map(function (r, i) {
+    var who = r.faculty !== undefined ? r.faculty : d.facultyName;
+    var prev = i > 0 ? (d.rows[i - 1].faculty !== undefined ? d.rows[i - 1].faculty : d.facultyName) : null;
     return fillRow_(i === 0 ? first : next, [
-      i === 0 ? d.facultyName : '',
+      i === 0 || who !== prev ? who : '',
       r.subject, r.course, r.year, r.total, r.passed, r.dropped, r.inc, r.four, r.failed, r.remarks
     ]);
   }).join('');
@@ -235,12 +246,12 @@ function fillSummaryXml_(xml, d) {
 /* ------------------------------ build the file --------------------------- */
 
 /**
- * Builds the .docx for the faculty member who handles `sectionId`, covering
- * all their classes in that semester, files it in Drive and returns it.
+ * Builds the one .docx for the semester of `sectionId`, covering every
+ * subject taught that semester, files it in Drive and returns it.
  */
 function buildSummaryOfGrades_(sectionId) {
   var record = getSectionRecord_(sectionId);
-  var d = summaryOfGradesData_(record.instructor, record.semesterId);
+  var d = summaryOfGradesData_(record.semesterId);
   var s = settings_();
   d.chairName = str_(s['SUMMARY_CHAIR_NAME']);
   d.deanName = str_(s['SUMMARY_DEAN_NAME']);
@@ -256,7 +267,7 @@ function buildSummaryOfGrades_(sectionId) {
   });
   if (!found) throw new Error('The Summary of Grades template is not a Word document.');
 
-  var name = ('Summary of Grades - ' + d.facultyName + ' - ' + (d.semesterName || today_()))
+  var name = ('Summary of Grades - ' + (d.semesterName || today_()))
     .replace(/[\\/:*?"<>|]/g, '-') + '.docx';
   var blob = Utilities.zip(parts, name).setContentType(SUMMARY.DOCX_MIME).setName(name);
 
