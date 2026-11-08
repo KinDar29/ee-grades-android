@@ -79,6 +79,12 @@ change log at the bottom for every change you ship.
   (`sectionKey_`: letters/digits only) and the workbook's per-section data
   (`statements[].bySection`, `ratingDist`). Direct CO attainment comes only
   class-wide from the workbook's Comparison tab.
+  "⬇ Download PDF" on the Indirect tab (`downloadIndirectPdf`, generic
+  `buildReportPdf(title, subtitle, pieces)`): builds the PDF in the browser —
+  each piece is drawn off-screen in `.pdf-report` (light theme), captured with
+  html-to-image 1.11.13 (jsDelivr) and placed on A4 pages with pdf-lib 1.17.1
+  (cdnjs). Follows the section dropdown. Download names are forced to ASCII
+  (Chrome drops names containing "–").
 - `CourseFiles.js` — Syllabus / TOS (Midterm Exam) / TOS (Final Exam) PDFs
   per class. Admin: "📄 Course files" on the class page (upload ≤ 10 MB PDF,
   optionally to every section of the same subject that semester; replace;
@@ -213,3 +219,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-08** — Portal deployment version 17. Course files: Syllabus and TOS
   for Midterm / Final Exam uploaded per class by the admin, viewed by enrolled
   students in the portal (pdf.js) and in the app (still 1.2.0, unreleased).
+- **2026-11-08** — Portal deployment version 18: "⬇ Download PDF" on the
+  Indirect assessment tab (all charts and results for the chosen section or
+  all sections, every survey statement, who hasn't answered).
