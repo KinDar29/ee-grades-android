@@ -1,5 +1,10 @@
 package ph.edu.mmsu.ee.grades.ui
 
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Button
+import android.net.Uri
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ph.edu.mmsu.ee.grades.data.ClassItem
 import ph.edu.mmsu.ee.grades.data.Grade
 import ph.edu.mmsu.ee.grades.data.StudentClass
+import ph.edu.mmsu.ee.grades.data.Survey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,6 +105,10 @@ fun ClassScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item { ClassHeader(data) }
+
+                    data.survey?.takeIf { it.url.startsWith("https://") }?.let { survey ->
+                        item { SurveyCard(survey) }
+                    }
 
                     vm.error?.let { message ->
                         item { ErrorBanner(message = message, onRetry = { vm.refresh() }) }
@@ -268,5 +278,47 @@ private fun AssessmentRow(item: ClassItem, showClassAverage: Boolean) {
 
         Spacer(Modifier.height(10.dp))
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+@Composable
+private fun SurveyCard(survey: Survey) {
+    val context = LocalContext.current
+    val done = survey.submitted == true
+    val open = {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(survey.url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+        Unit
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (done) MaterialTheme.colorScheme.surfaceVariant
+            else MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                text = "Course outcome self-assessment",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (done) "✓ Submitted — thank you."
+                else "Rate how well you reached this class's course outcomes. It takes a few minutes.",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Spacer(Modifier.height(12.dp))
+            if (done) {
+                OutlinedButton(onClick = open) { Text("Open the survey again") }
+            } else {
+                Button(onClick = open) { Text("Answer the survey") }
+            }
+        }
     }
 }
