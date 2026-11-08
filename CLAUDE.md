@@ -193,7 +193,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   who hasn't answered) read from the Course Outcome Assessment Workbook.
 - **2026-11-08** — App (still 1.2.0, unreleased): survey card on the class page;
   INC / Dropped / Conditional / Failed labels in the admin roster.
-- **2026-11-08** — Portal (not deployed yet): new admin "Direct assessment"
+- **2026-11-08** — Portal deployment version 16: new admin "Direct assessment"
   dashboard (standing donut, grade distribution, average by requirement type,
   classes compared, every requirement with score range + spread on click,
   students to watch); charts added to "Indirect assessment"; section dropdown
