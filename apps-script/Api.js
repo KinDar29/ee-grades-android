@@ -91,6 +91,8 @@ function route_(action, p, token) {
 
     case 'student.class':
       return studentClass_(requireSession_(token), p.sectionId);
+    case 'student.file':
+      return getCourseFile_(requireSession_(token, 'student'), p.sectionId, p.kind);
 
     /* ---- admin ---- */
     case 'admin.home':
@@ -139,6 +141,16 @@ function route_(action, p, token) {
       return indirectDashboard_(requireSession_(token, 'admin'), p.semesterId);
     case 'admin.indirect.refresh':
       return refreshIndirect_(requireSession_(token, 'admin'), p.semesterId);
+    case 'admin.files':
+      return adminCourseFiles_(requireSession_(token, 'admin'), p.sectionId);
+    case 'admin.files.upload':
+      return uploadCourseFile_(requireSession_(token, 'admin'), p);
+    case 'admin.files.visible':
+      return setCourseFileVisible_(requireSession_(token, 'admin'), p.sectionId, p.kind, p.visible);
+    case 'admin.files.remove':
+      return removeCourseFile_(requireSession_(token, 'admin'), p.sectionId, p.kind);
+    case 'admin.file':
+      return getCourseFile_(requireSession_(token, 'admin'), p.sectionId, p.kind);
     case 'admin.direct':
       return directDashboard_(requireSession_(token, 'admin'), p.semesterId, false);
     case 'admin.direct.refresh':
@@ -294,6 +306,7 @@ function studentClass_(session, sectionId) {
       instructor: section.instructor, schedule: section.schedule, room: section.room
     },
     survey: surveyForStudent_(section, session.id),
+    files: courseFilesFor_(section.id, true),
     items: items,
     classSize: data.roster.length,
     grade: bool_(s['SHOW_RUNNING_GRADE']) ? grade : {

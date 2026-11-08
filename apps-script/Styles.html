@@ -505,4 +505,21 @@ tr.clickable { cursor: pointer; }
 tr.clickable:hover td, tr.clickable.on td { background: var(--green-100); }
 .req-detail:not(:empty) { margin-top: 14px; }
 @media (max-width: 640px) { .cols-plot { height: 140px; } .donut { width: 120px; height: 120px; } }
+
+/* ------------------------------ course files ------------------------------ */
+.file-list { display: flex; flex-direction: column; }
+.file-row { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.file-row:last-child { border-bottom: 0; }
+.file-ic { flex: none; width: 38px; height: 44px; border-radius: 6px; background: var(--danger-bg); color: var(--danger);
+  font-size: 10.5px; font-weight: 700; display: grid; place-items: center; border: 1px solid var(--border); }
+.file-ic.none { background: var(--surface-2); color: var(--faint); }
+.file-txt { flex: 1; min-width: 180px; }
+.file-txt .tiny { word-break: break-word; }
+.file-acts { display: flex; gap: 6px; flex-wrap: wrap; }
+label.check { display: flex; align-items: center; gap: 6px; margin-top: 4px; cursor: pointer; font-weight: 400; color: var(--text); }
+label.check input { width: auto; margin: 0; }
+.modal.pdf { max-width: 940px; height: 92vh; }
+.modal.pdf .body { background: var(--surface-2); padding: 12px; flex: 1; }
+.pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.pdf-pages canvas { max-width: 100%; height: auto; background: #fff; box-shadow: var(--shadow-sm); border-radius: 2px; }
 </style>

@@ -1,5 +1,13 @@
 package ph.edu.mmsu.ee.grades.ui
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
+import java.io.File
+import androidx.core.content.FileProvider
+import android.widget.Toast
+import android.content.Context
+import android.content.ActivityNotFoundException
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
@@ -39,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ph.edu.mmsu.ee.grades.data.ClassItem
+import ph.edu.mmsu.ee.grades.data.CourseFile
 import ph.edu.mmsu.ee.grades.data.Grade
 import ph.edu.mmsu.ee.grades.data.StudentClass
 import ph.edu.mmsu.ee.grades.data.Survey
@@ -51,6 +60,7 @@ fun ClassScreen(
     onAuthLost: (String?) -> Unit
 ) {
     val vm: ClassViewModel = viewModel()
+    val context = LocalContext.current
 
     LaunchedEffect(sectionId) { vm.start(sectionId) }
     LaunchedEffect(vm.authLost) { vm.authLost?.let(onAuthLost) }
@@ -108,6 +118,23 @@ fun ClassScreen(
 
                     data.survey?.takeIf { it.url.startsWith("https://") }?.let { survey ->
                         item { SurveyCard(survey) }
+                    }
+
+                    if (data.files.isNotEmpty()) {
+                        item {
+                            CourseFilesCard(
+                                files = data.files,
+                                opening = vm.openingFile,
+                                onOpen = { kind ->
+                                    vm.openFile(
+                                        kind = kind,
+                                        dir = File(context.cacheDir, "course-files"),
+                                        onReady = { file -> openPdf(context, file) },
+                                        onError = { msg -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
+                                    )
+                                }
+                            )
+                        }
                     }
 
                     vm.error?.let { message ->
@@ -320,5 +347,57 @@ private fun SurveyCard(survey: Survey) {
                 Button(onClick = open) { Text("Answer the survey") }
             }
         }
+    }
+}
+
+@Composable
+private fun CourseFilesCard(files: List<CourseFile>, opening: String?, onOpen: (String) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(vertical = 12.dp)) {
+            Text(
+                text = "Course files",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            files.forEachIndexed { i, f ->
+                if (i > 0) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(f.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = f.name + if (f.size > 0) " · " + fileSizeLabel(f.size) else "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (opening == f.kind) {
+                        CircularProgressIndicator(modifier = Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        TextButton(onClick = { onOpen(f.kind) }, enabled = opening == null) { Text("View") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun fileSizeLabel(bytes: Long): String =
+    if (bytes >= 1_048_576) String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+    else "${maxOf(1, bytes / 1024)} KB"
+
+/** Hand the downloaded PDF to the phone's PDF viewer through our FileProvider. */
+private fun openPdf(context: Context, file: File) {
+    val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
+    val intent = Intent(Intent.ACTION_VIEW)
+        .setDataAndType(uri, "application/pdf")
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(Intent.createChooser(intent, file.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: ActivityNotFoundException) {
+        Toast.makeText(context, "Install a PDF viewer to open this file.", Toast.LENGTH_LONG).show()
     }
 }

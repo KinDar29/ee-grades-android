@@ -626,6 +626,8 @@ function renderStudentClass(sectionId) {
       '</div></div></div>';
     }
 
+    html += courseFilesCard(sec.id, d.files);
+
     if (d.showRunningGrade) {
       html += '<div class="card"><div class="card-body">' +
         '<div class="grade-hero">' +
@@ -695,6 +697,7 @@ function renderStudentClass(sectionId) {
 
     setContent(html);
     $('#backHome').addEventListener('click', renderStudentHome);
+    bindFileButtons('student.file');
 
     // Everything on this screen has now been seen.
     if (seen.init) {
@@ -712,6 +715,216 @@ function renderStudentClass(sectionId) {
       '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
     var b = $('#backHome');
     if (b) b.addEventListener('click', renderStudentHome);
+  });
+}
+
+/* ------------------------------ course files ------------------------------ */
+/*  Syllabus and TOS PDFs. The bytes come through the API (the Drive files are
+    not shared) and are drawn page by page with pdf.js, so they open the same
+    way in every browser. If pdf.js can't load, the file is offered as a
+    download instead.                                                          */
+
+var PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.min.mjs';
+var PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs';
+var _pdfjs = null;
+
+function loadPdfJs() {
+  if (!_pdfjs) {
+    _pdfjs = import(PDFJS_URL).then(function (lib) {
+      lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      return lib;
+    });
+    _pdfjs.catch(function () { _pdfjs = null; });
+  }
+  return _pdfjs;
+}
+
+function base64Bytes(b64) {
+  var bin = atob(b64), out = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function fileSize(n) {
+  if (!n) return '';
+  return n >= 1048576 ? fmt(n / 1048576, 1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+}
+
+/** Open a PDF returned by student.file / admin.file in a viewer. */
+function openPdf(res) {
+  var bytes = base64Bytes(res.data);
+  var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  var m = openModal({
+    title: res.label + ' · ' + res.name,
+    wide: true,
+    body: '<div class="pdf-pages" id="pdfPages"><div class="loading"><span class="spinner"></span> Opening…</div></div>',
+    footer: '<span class="small muted" id="pdfInfo"></span><div class="spacer"></div>' +
+      '<a class="btn" href="' + url + '" download="' + esc(res.name) + '">⬇ Download</a>' +
+      '<button class="btn primary" data-close="1">Close</button>'
+  });
+  m.root.querySelector('.modal').classList.add('pdf');
+  m.root.addEventListener('click', function (e) {
+    if (e.target.closest('[data-close]') || e.target === m.root) setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  });
+  var box = m.root.querySelector('#pdfPages');
+  loadPdfJs().then(function (lib) {
+    return lib.getDocument({ data: bytes.slice() }).promise;
+  }).then(function (pdf) {
+    box.innerHTML = '';
+    m.root.querySelector('#pdfInfo').textContent = pdf.numPages + ' page' + (pdf.numPages === 1 ? '' : 's');
+    var width = Math.max(300, box.clientWidth - 2);
+    var ratio = Math.min(2, window.devicePixelRatio || 1);
+    var chain = Promise.resolve();
+    for (var n = 1; n <= pdf.numPages; n++) {
+      (function (n) {
+        chain = chain.then(function () {
+          if (!document.body.contains(box)) return null;   // viewer closed
+          return pdf.getPage(n).then(function (page) {
+            var base = page.getViewport({ scale: 1 });
+            var vp = page.getViewport({ scale: width / base.width * ratio });
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.floor(vp.width);
+            canvas.height = Math.floor(vp.height);
+            canvas.style.width = Math.floor(vp.width / ratio) + 'px';
+            canvas.setAttribute('aria-label', 'Page ' + n);
+            box.appendChild(canvas);
+            return page.render({ canvasContext: canvas.getContext('2d'), canvas: canvas, viewport: vp }).promise;
+          });
+        });
+      })(n);
+    }
+    return chain;
+  }).catch(function (err) {
+    console.warn('pdf viewer', err);
+    box.innerHTML = '<div class="alert warn"><span class="ic">!</span><div>The file can’t be shown here. ' +
+      'Use <b>Download</b> to open it on your device.</div></div>';
+  });
+}
+
+/** Student class page: list of the files the admin made visible. */
+function courseFilesCard(sectionId, files) {
+  if (!files || !files.length) return '';
+  return '<div class="card"><div class="card-head"><h3>Course files</h3></div><div class="card-body tight">' +
+    '<div class="file-list">' + files.map(function (f) {
+      return '<div class="file-row"><span class="file-ic">PDF</span>' +
+        '<div class="file-txt"><b>' + esc(f.label) + '</b><div class="tiny muted">' + esc(f.name) +
+        (f.size ? ' · ' + fileSize(f.size) : '') + '</div></div>' +
+        '<button class="btn sm" data-view-file="' + esc(f.kind) + '" data-section="' + esc(sectionId) + '">View</button></div>';
+    }).join('') + '</div></div></div>';
+}
+
+function bindFileButtons(action) {
+  $$('[data-view-file]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var btn = this;
+      busy(btn, true, 'Opening…');
+      call(action, { sectionId: btn.dataset.section, kind: btn.dataset.viewFile })
+        .then(function (res) { busy(btn, false); openPdf(res); })
+        .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+    });
+  });
+}
+
+/** Admin: upload / replace / show-hide / remove the class's files. */
+function manageCourseFiles(section) {
+  var m = openModal({
+    title: 'Course files · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name,
+    wide: true,
+    body: '<div class="loading"><span class="spinner"></span> Loading…</div>',
+    footer: '<button class="btn primary" data-close="1">Done</button>'
+  });
+  var body = m.root.querySelector('.body');
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/pdf,.pdf';
+  input.style.display = 'none';
+  m.root.appendChild(input);
+  var pendingKind = null, data = null;
+
+  function draw(d) {
+    data = d;
+    var byKind = {};
+    d.files.forEach(function (f) { byKind[f.kind] = f; });
+    var html = '<p class="small muted" style="margin:0 0 12px">PDF only, up to ' + fileSize(d.maxBytes) +
+      '. Students of this class see the files marked <b>Shown to students</b> on their class page. ' +
+      'The files stay private in your Drive (semester folder → Course Files).</p><div class="file-list">';
+    d.kinds.forEach(function (k) {
+      var f = byKind[k.id];
+      html += '<div class="file-row"><span class="file-ic' + (f ? '' : ' none') + '">PDF</span>' +
+        '<div class="file-txt"><b>' + esc(k.label) + '</b><div class="tiny muted">' +
+        (f ? esc(f.name) + ' · ' + fileSize(f.size) + ' · uploaded ' + esc(f.uploaded) : 'Not uploaded yet') + '</div>' +
+        (f ? '<label class="check tiny"><input type="checkbox" data-vis="' + k.id + '"' + (f.visible ? ' checked' : '') +
+          '> Shown to students</label>' : '') + '</div>' +
+        '<div class="file-acts">' +
+        (f ? '<button class="btn sm" data-view-file="' + k.id + '" data-section="' + esc(section.id) + '">View</button>' : '') +
+        '<button class="btn sm' + (f ? '' : ' primary') + '" data-up="' + k.id + '">' + (f ? 'Replace' : '⬆ Upload PDF') + '</button>' +
+        (f ? '<button class="btn sm ghost" data-rm="' + k.id + '" title="Remove">✕</button>' : '') +
+        '</div></div>';
+    });
+    html += '</div>';
+    if (d.siblings.length) {
+      html += '<div class="field" style="margin-top:16px"><label>When uploading, also use the file for</label>' +
+        d.siblings.map(function (s) {
+          return '<label class="check small"><input type="checkbox" data-also="' + esc(s.id) + '" checked> ' + esc(s.name) + '</label>';
+        }).join('') + '<span class="hint">Other sections of the same subject this semester.</span></div>';
+    }
+    body.innerHTML = html;
+    bindFileButtons('admin.file');
+    $$('[data-up]', body).forEach(function (b) {
+      b.addEventListener('click', function () { pendingKind = this.dataset.up; input.value = ''; input.click(); });
+    });
+    $$('[data-vis]', body).forEach(function (c) {
+      c.addEventListener('change', function () {
+        var el = this;
+        el.disabled = true;
+        call('admin.files.visible', { sectionId: section.id, kind: el.dataset.vis, visible: el.checked })
+          .then(function (d2) { draw(d2); toast(el.checked ? 'Students can now see it.' : 'Hidden from students.'); })
+          .catch(function (err) { el.disabled = false; el.checked = !el.checked; toast(err.message, 'error'); });
+      });
+    });
+    $$('[data-rm]', body).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var kind = this.dataset.rm;
+        var label = d.kinds.filter(function (k) { return k.id === kind; })[0].label;
+        confirmDialog('Remove ' + label + '?', 'Students of this class will no longer see it. Other sections keep their copy.', 'Remove', true)
+          .then(function (ok) {
+            if (!ok) return;
+            body.innerHTML = '<div class="loading"><span class="spinner"></span> Removing…</div>';
+            call('admin.files.remove', { sectionId: section.id, kind: kind }).then(draw)
+              .catch(function (err) { toast(err.message, 'error'); draw(d); });
+          });
+      });
+    });
+  }
+
+  input.addEventListener('change', function () {
+    var file = input.files && input.files[0];
+    if (!file || !pendingKind) return;
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+      toast('Please choose a PDF. Save Word or Excel files as PDF first.', 'error');
+      return;
+    }
+    if (file.size > data.maxBytes) { toast('The file is larger than ' + fileSize(data.maxBytes) + '.', 'error'); return; }
+    var also = $$('[data-also]', body).filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.also; });
+    var kind = pendingKind;
+    body.innerHTML = '<div class="loading"><span class="spinner"></span> Uploading ' + esc(file.name) + '…</div>';
+    var reader = new FileReader();
+    reader.onload = function () {
+      var b64 = String(reader.result).replace(/^data:[^,]*,/, '');
+      call('admin.files.upload', {
+        sectionId: section.id, kind: kind, name: file.name, mimeType: 'application/pdf',
+        data: b64, visible: true, alsoSectionIds: also
+      }).then(function (d2) {
+        draw(d2);
+        toast('Uploaded' + (also.length ? ' to ' + (also.length + 1) + ' sections' : '') + '.');
+      }).catch(function (err) { toast(err.message, 'error'); draw(data); });
+    };
+    reader.onerror = function () { toast('The file could not be read.', 'error'); draw(data); };
+    reader.readAsDataURL(file);
+  });
+
+  call('admin.files', { sectionId: section.id }).then(draw).catch(function (err) {
+    body.innerHTML = '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
   });
 }
 
@@ -1509,6 +1722,7 @@ function drawGradebook() {
     '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(d.spreadsheetUrl) + '">Open in Sheets ↗</a>' +
     '<button class="btn sm" id="gbAddStudents">+ Students</button>' +
     '<button class="btn sm primary" id="gbAddAsm">+ Requirement</button>' +
+    '<button class="btn sm" id="gbFiles">📄 Course files</button>' +
     '<button class="btn sm gold" id="gbExport">⬇ Class record (PDF)</button>' +
     '<button class="btn sm" id="gbMore">⋯</button>' +
   '</div>';
@@ -1649,6 +1863,9 @@ function bindGradebook() {
         });
     });
   });
+
+  var filesBtn = $('#gbFiles');
+  if (filesBtn) filesBtn.addEventListener('click', function () { manageCourseFiles(d.section); });
 
   var exportBtn = $('#gbExport');
   if (exportBtn) exportBtn.addEventListener('click', function () {

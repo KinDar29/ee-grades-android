@@ -142,6 +142,29 @@ class Repository(
         return result
     }
 
+    /**
+     * Downloads a course file (Syllabus / TOS) into [dir] and returns it.
+     * Files are not cached between visits: the admin may replace them.
+     */
+    suspend fun downloadCourseFile(sectionId: String, kind: String, dir: java.io.File): java.io.File {
+        val data = api.call(
+            action = "student.file",
+            payload = buildJsonObject {
+                put("sectionId", sectionId)
+                put("kind", kind)
+            },
+            token = requireToken()
+        )
+        val file = api.json.decodeFromJsonElement(CourseFileData.serializer(), data)
+        val bytes = java.util.Base64.getDecoder().decode(file.data)
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            dir.mkdirs()
+            dir.listFiles()?.forEach { it.delete() }   // keep only the latest one
+            val safe = file.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").ifBlank { "${file.kind}.pdf" }
+            java.io.File(dir, if (safe.endsWith(".pdf", true)) safe else "$safe.pdf").apply { writeBytes(bytes) }
+        }
+    }
+
     /* ------------------------------ new scores ------------------------------ */
     /*  The phone remembers every score it has already told the student about
         ("<sectionId>|<assessmentId>" -> score). The first check after sign-in
