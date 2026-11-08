@@ -139,6 +139,10 @@ function route_(action, p, token) {
       return indirectDashboard_(requireSession_(token, 'admin'), p.semesterId);
     case 'admin.indirect.refresh':
       return refreshIndirect_(requireSession_(token, 'admin'), p.semesterId);
+    case 'admin.direct':
+      return directDashboard_(requireSession_(token, 'admin'), p.semesterId, false);
+    case 'admin.direct.refresh':
+      return directDashboard_(requireSession_(token, 'admin'), p.semesterId, true);
 
     case 'admin.export.pdf':
       return exportClassRecordPdf_(requireSession_(token, 'admin'), p);

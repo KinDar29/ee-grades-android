@@ -735,6 +735,7 @@ function refreshAdmin(semesterId) {
 
 function drawAdminTab() {
   if (S.tab === 'classes') renderClassesTab();
+  else if (S.tab === 'direct') renderDirectTab();
   else if (S.tab === 'indirect') renderIndirectTab();
   else if (S.tab === 'students') renderStudentsTab();
   else if (S.tab === 'subjects') renderSubjectsTab();
@@ -757,6 +758,120 @@ function bindSemesterPicker() {
   if (p) p.addEventListener('change', function () { refreshAdmin(this.value); });
 }
 
+/* ------------------------------ chart helpers ------------------------------ */
+/*  Plain HTML/SVG, no libraries. Colours come from the theme variables so the
+    charts follow light and dark mode. Every value is also in a tooltip.       */
+
+var C = {
+  green: 'var(--green-600)', gold: 'var(--gold-500)', red: 'var(--danger)',
+  orange: 'var(--warn)', grey: 'var(--faint)', light: 'var(--border-strong)', blue: 'var(--info)'
+};
+var RATING_COLORS = ['var(--danger)', 'var(--warn)', 'var(--gold-500)', '#5fa57f', 'var(--green-600)'];
+
+function pctOf(n, total) { return total ? n / total * 100 : 0; }
+function avgOf(list) {
+  var v = list.filter(function (x) { return x !== null && x !== undefined && !isNaN(x); });
+  return v.length ? v.reduce(function (a, b) { return a + Number(b); }, 0) / v.length : null;
+}
+function secKey(v) { return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+function legend(items, total) {
+  return '<div class="legend">' + items.map(function (s) {
+    return '<span><i' + (s.dash ? ' class="dash"' : ' style="background:' + s.color + '"') + '></i>' + esc(s.label) +
+      (s.value !== undefined ? ' <b>' + s.value + '</b>' : '') +
+      (total ? ' <span class="faint">(' + fmt(pctOf(s.value, total), 0) + '%)</span>' : '') + '</span>';
+  }).join('') + '</div>';
+}
+
+/** Donut chart with a legend. segments: [{label, value, color}] */
+function donut(title, segments, centerBig, centerSmall) {
+  var total = segments.reduce(function (n, s) { return n + s.value; }, 0);
+  var r = 58, w = 20, circ = 2 * Math.PI * r, off = 0;
+  var arcs = total ? segments.filter(function (s) { return s.value > 0; }).map(function (s) {
+    var len = s.value / total * circ;
+    var gap = segments.filter(function (x) { return x.value > 0; }).length > 1 ? Math.min(2, len / 2) : 0;
+    var a = '<circle cx="80" cy="80" r="' + r + '" fill="none" stroke-width="' + w + '" style="stroke:' + s.color + '"' +
+      ' stroke-dasharray="' + (len - gap).toFixed(2) + ' ' + (circ - len + gap).toFixed(2) + '"' +
+      ' stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 80 80)">' +
+      '<title>' + esc(s.label) + ': ' + s.value + ' (' + fmt(pctOf(s.value, total), 0) + '%)</title></circle>';
+    off += len;
+    return a;
+  }).join('') : '';
+  return '<div class="chart-box"><div class="chart-title">' + esc(title) + '</div>' +
+    '<div class="donut-wrap"><svg viewBox="0 0 160 160" class="donut" role="img" aria-label="' + esc(title) + '">' +
+    '<circle cx="80" cy="80" r="' + r + '" fill="none" stroke-width="' + w + '" style="stroke:var(--border)"/>' + arcs +
+    '<text x="80" y="80" text-anchor="middle" class="donut-big">' + esc(centerBig) + '</text>' +
+    '<text x="80" y="100" text-anchor="middle" class="donut-small">' + esc(centerSmall || '') + '</text></svg>' +
+    legend(segments, total) + '</div></div>';
+}
+
+/**
+ * Column chart. groups: [{label, bars:[{value, color, title}]}]; values 0–max.
+ * opts: {max, unit, target, targetLabel, series:[{label,color}]}
+ */
+function columns(title, groups, opts) {
+  opts = opts || {};
+  var max = opts.max || Math.max.apply(null, [1].concat(groups.map(function (g) {
+    return Math.max.apply(null, g.bars.map(function (b) { return b.value || 0; }));
+  })));
+  var unit = opts.unit || '';
+  var series = (opts.series || []).slice();
+  if (opts.target !== undefined) series.push({ label: opts.targetLabel || (opts.target + unit), color: '', dash: true });
+  var html = '<div class="chart-box' + (opts.wide ? ' wide' : '') + '"><div class="chart-title">' + esc(title) + '</div>' +
+    (series.length ? legend(series) : '') +
+    '<div class="cols"><div class="cols-plot">' +
+    '<div class="cols-grid"><i style="bottom:100%"></i><i style="bottom:50%"></i><i style="bottom:0"></i></div>' +
+    (opts.target !== undefined ? '<div class="cols-target" style="bottom:' + Math.min(100, opts.target / max * 100) + '%"></div>' : '') +
+    groups.map(function (g) {
+      return '<div class="col">' + g.bars.map(function (b) {
+        var h = b.value === null || b.value === undefined ? 0 : Math.max(0, Math.min(100, b.value / max * 100));
+        return '<i style="height:' + h + '%;background:' + b.color + '" title="' + esc(b.title || (g.label + ': ' + fmt(b.value, 0) + unit)) + '">' +
+          (b.value === null || b.value === undefined ? '' : '<b>' + (unit === '%' ? fmt(b.value, 0) : b.value) + '</b>') + '</i>';
+      }).join('') + '</div>';
+    }).join('') + '</div>' +
+    '<div class="cols-labels">' + groups.map(function (g) { return '<span title="' + esc(g.label) + '">' + esc(g.label) + '</span>'; }).join('') + '</div>' +
+    '</div></div>';
+  return html;
+}
+
+/** 100% stacked bar. parts: [{value, color, label}] */
+function stack(parts) {
+  var total = parts.reduce(function (n, p) { return n + p.value; }, 0);
+  if (!total) return '<div class="hstack"></div>';
+  return '<div class="hstack">' + parts.filter(function (p) { return p.value; }).map(function (p) {
+    var w = pctOf(p.value, total);
+    return '<i style="width:' + w + '%;background:' + p.color + '" title="' + esc(p.label + ': ' + p.value + ' (' + fmt(w, 0) + '%)') + '">' +
+      (w >= 9 ? fmt(w, 0) + '%' : '') + '</i>';
+  }).join('') + '</div>';
+}
+
+/** Range bar 0–100: light band low→high, solid bar to the mean, tick at the pass mark. */
+function rangeBar(mean, low, high, pass) {
+  if (mean === null) return '<span class="muted">—</span>';
+  return '<div class="range" title="Average ' + fmt(mean, 0) + '% · lowest ' + fmt(low, 0) + '% · highest ' + fmt(high, 0) + '%">' +
+    '<span class="band" style="left:' + low + '%;width:' + Math.max(0.5, high - low) + '%"></span>' +
+    '<span class="avg' + (mean < pass ? ' low' : '') + '" style="width:' + Math.min(100, mean) + '%"></span>' +
+    '<span class="tick" style="left:' + pass + '%"></span></div>';
+}
+
+/** Section dropdown shared by both dashboards. sections: [{id, label, count}] */
+function sectionPicker(sections) {
+  var total = sections.reduce(function (n, s) { return n + (s.count || 0); }, 0);
+  var cur = S.dashSection || '';
+  if (!sections.some(function (s) { return s.id === cur; })) cur = '';
+  return '<select id="dashSec" style="width:auto;min-width:210px">' +
+    '<option value="">All sections · all students' + (total ? ' (' + total + ')' : '') + '</option>' +
+    sections.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === cur ? ' selected' : '') + '>' +
+        esc(s.label) + (s.count !== undefined ? ' (' + s.count + ')' : '') + '</option>';
+    }).join('') + '</select>';
+}
+
+function bindSectionPicker(redraw) {
+  var p = $('#dashSec');
+  if (p) p.addEventListener('change', function () { S.dashSection = this.value; redraw(); });
+}
+
 /* --------------------------- indirect assessment --------------------------- */
 
 function meter(value, kind) {
@@ -769,18 +884,74 @@ function meter(value, kind) {
 function renderIndirectTab(refresh) {
   loading(refresh === true ? 'Re-reading the assessment workbook…' : 'Reading the assessment workbook…');
   call(refresh === true ? 'admin.indirect.refresh' : 'admin.indirect', { semesterId: S.admin ? S.admin.semesterId : '' })
-    .then(drawIndirectTab)
+    .then(function (r) { S.indirect = r; drawIndirectTab(r); })
     .catch(function (err) {
       setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
     });
 }
 
+/** The block's numbers for one section (key) or the whole class (''). */
+function indirectView(b, key) {
+  var d = b.data;
+  var secs = key ? b.sections.filter(function (s) { return s.key === key; }) : b.sections;
+  var v = {
+    enrolled: secs.reduce(function (n, s) { return n + s.enrolled; }, 0),
+    answered: secs.reduce(function (n, s) { return n + s.answered; }, 0),
+    sections: secs, cos: [], statements: [], students: [], overall: null, dist: {}
+  };
+  if (!d) return v;
+  v.students = (d.students || []).filter(function (s) { return !key || secKey(s.section) === key; });
+  var done = v.students.filter(function (s) { return s.submitted; });
+  v.cos = d.cos.map(function (c) {
+    if (!key) return c;
+    var pcts = done.map(function (s) { return s.pct ? s.pct[c.co] : null; }).filter(function (x) { return x !== null && x !== undefined; });
+    var at = pcts.filter(function (x) { return x >= 70; }).length;
+    var avgR = avgOf(done.map(function (s) { return s.ratings ? s.ratings[c.co] : null; }));
+    var ind = pcts.length ? at / pcts.length * 100 : null;
+    return {
+      co: c.co, description: c.description, weight: c.weight,
+      averageRating: avgR, atLeast70: at, answered: pcts.length, indirect: ind, direct: c.direct,
+      gap: ind !== null && c.direct !== null ? ind - c.direct : null
+    };
+  });
+  if (key) {
+    var ov = done.map(function (s) { return s.overall; }).filter(function (x) { return x !== null && x !== undefined; });
+    var oat = ov.filter(function (x) { return x >= 70; }).length;
+    v.overall = { atLeast70: oat, answered: ov.length, indirect: ov.length ? oat / ov.length * 100 : null, direct: d.overall ? d.overall.direct : null };
+  } else {
+    v.overall = d.overall;
+  }
+  v.statements = (d.statements || []).map(function (s) {
+    if (!key) return s;
+    var x = s.bySection && s.bySection[key];
+    return { co: s.co, text: s.text, average: x ? x.average : null, answered: x ? x.answered : 0 };
+  });
+  (d.cos || []).forEach(function (c) {
+    var all = d.ratingDist && d.ratingDist[c.co];
+    v.dist[c.co] = all ? (all[key || '*'] || [0, 0, 0, 0, 0]) : null;
+  });
+  return v;
+}
+
 function drawIndirectTab(r) {
+  r = r || S.indirect;
+  // dropdown: every section that has a survey
+  var seen = {}, opts = [];
+  r.blocks.forEach(function (b) {
+    b.sections.forEach(function (s) {
+      if (seen[s.id]) return;
+      seen[s.id] = true;
+      opts.push({ id: s.id, key: s.key, label: (b.subject.split(' — ')[0] || '') + ' · ' + s.name, count: s.enrolled });
+    });
+  });
+  var sel = opts.filter(function (o) { return o.id === S.dashSection; })[0];
+  var key = sel ? sel.key : '';
+
   var html = '<div class="row wrap" style="margin-bottom:16px">' +
     '<div><h2 style="font-size:20px">Indirect assessment</h2>' +
     '<div class="small muted">Students’ self-ratings of the course outcomes, from each class’s survey. ' +
     'Read from the course outcome assessment workbook · ' + esc(r.checkedAt) + '</div></div>' +
-    '<div class="spacer"></div>' + semesterPicker() +
+    '<div class="spacer"></div>' + semesterPicker() + (opts.length ? sectionPicker(opts) : '') +
     '<button class="btn" id="indRefresh">↻ Refresh</button></div>';
 
   if (!r.blocks.length) {
@@ -789,10 +960,11 @@ function drawIndirectTab(r) {
   }
 
   r.blocks.forEach(function (b) {
-    var enrolled = b.sections.reduce(function (n, s) { return n + s.enrolled; }, 0);
-    var answered = b.sections.reduce(function (n, s) { return n + s.answered; }, 0);
+    if (key && !b.sections.some(function (s) { return s.key === key; })) return;
+    var v = indirectView(b, key);
     var d = b.data;
-    html += '<div class="card"><div class="card-head"><h3>' + esc(b.subject) + '</h3><div class="spacer"></div>' +
+    html += '<div class="card"><div class="card-head"><h3>' + esc(b.subject) +
+      (sel ? ' <span class="badge">' + esc(sel.label.split(' · ').pop()) + '</span>' : '') + '</h3><div class="spacer"></div>' +
       (b.surveyUrl ? '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(b.surveyUrl) + '">Open the form ↗</a> ' +
         '<button class="btn sm" data-copy="' + esc(b.surveyUrl) + '">Copy student link</button> ' : '') +
       (b.workbookUrl ? '<a class="btn sm ghost" target="_blank" rel="noopener" href="' + esc(b.workbookUrl) + '">Workbook ↗</a>' : '') +
@@ -802,35 +974,61 @@ function drawIndirectTab(r) {
       html += '<div class="alert warn"><span class="ic">!</span><div>' + esc(b.error) + '</div></div>';
     }
 
-    var rate = enrolled ? Math.round(answered / enrolled * 100) : 0;
-    html += '<div class="stat-row" style="margin-bottom:18px">' +
-      '<div class="stat"><div class="v">' + answered + ' / ' + enrolled + '</div><div class="k">Students answered (' + rate + '%)</div></div>' +
-      (d && d.overall
-        ? '<div class="stat"><div class="v">' + (d.overall.indirect === null ? '—' : fmt(d.overall.indirect, 0) + '%') +
-          '</div><div class="k">Rate themselves ≥ 70% overall</div></div>' +
-          '<div class="stat"><div class="v">' + (d.overall.direct === null ? '—' : fmt(d.overall.direct, 0) + '%') +
-          '</div><div class="k">Reached 70% on assessments (direct)</div></div>'
-        : '') +
-    '</div>';
+    var rate = v.enrolled ? Math.round(v.answered / v.enrolled * 100) : 0;
+    var o = v.overall;
+    html += '<div class="charts">' +
+      donut('Survey responses', [
+        { label: 'Answered', value: v.answered, color: C.green },
+        { label: 'Not yet', value: Math.max(0, v.enrolled - v.answered), color: C.light }
+      ], rate + '%', v.answered + ' of ' + v.enrolled);
+    if (o && o.answered) {
+      html += donut('Overall self-rating', [
+        { label: 'At least 70%', value: o.atLeast70, color: C.green },
+        { label: 'Below 70%', value: Math.max(0, o.answered - o.atLeast70), color: C.gold }
+      ], o.indirect === null ? '—' : fmt(o.indirect, 0) + '%', 'rate ≥ 70%');
+    }
+    if (!key && v.sections.length > 1) {
+      html += columns('Response rate by section', v.sections.map(function (s) {
+        return { label: s.name, bars: [{ value: s.enrolled ? s.answered / s.enrolled * 100 : 0, color: C.green, title: s.name + ': ' + s.answered + ' of ' + s.enrolled + ' answered' }] };
+      }), { max: 100, unit: '%' });
+    }
+    html += '</div>';
 
-    html += '<h4 style="margin:0 0 8px">Responses by section</h4><div class="table-wrap" style="margin-bottom:18px"><table>' +
-      '<thead><tr><th>Section</th><th class="num">Answered</th><th style="width:45%">Response rate</th></tr></thead><tbody>' +
-      b.sections.map(function (s) {
-        return '<tr><td>' + esc(s.name) + '</td><td class="num">' + s.answered + ' / ' + s.enrolled + '</td><td>' +
-          meter(s.enrolled ? s.answered / s.enrolled * 100 : 0) + '</td></tr>';
-      }).join('') + '</tbody></table></div>';
+    if (d && v.cos.length) {
+      html += '<div class="charts">' +
+        columns('Course outcome attainment: indirect vs direct', v.cos.map(function (c) {
+          return {
+            label: c.co, bars: [
+              { value: c.indirect, color: C.green, title: c.co + ' indirect: ' + fmt(c.indirect, 0) + '% rate themselves ≥ 70%' },
+              { value: c.direct, color: C.gold, title: c.co + ' direct: ' + fmt(c.direct, 0) + '% reached 70% on assessments' }
+            ]
+          };
+        }), {
+          max: 100, unit: '%', target: 70, targetLabel: '70% target',
+          series: [{ label: 'Indirect (self-rating ≥ 70%)', color: C.green }, { label: 'Direct (assessments ≥ 70%)' + (key ? ' · whole class' : ''), color: C.gold }]
+        });
 
-    if (d) {
-      html += '<h4 style="margin:0 0 4px">Course outcomes</h4>' +
-        '<p class="tiny faint" style="margin:0 0 8px"><span style="color:var(--green-600)">■</span> students rating themselves at least 70% (indirect) · ' +
-        '<span style="color:var(--gold-500)">■</span> students reaching 70% on assessments (direct). ' +
-        'A positive gap means students rate themselves higher than their results show.</p>' +
+      var labels = d.ratingLabels || {};
+      var hasDist = v.cos.some(function (c) { return v.dist[c.co] && v.dist[c.co].some(function (n) { return n; }); });
+      if (hasDist) {
+        html += '<div class="chart-box"><div class="chart-title">How students rated each outcome</div>' +
+          legend([1, 2, 3, 4, 5].map(function (n) { return { label: n + (labels[n] ? ' · ' + labels[n] : ''), color: RATING_COLORS[n - 1] }; })) +
+          '<div class="stack-rows">' + v.cos.map(function (c) {
+            var dd = v.dist[c.co] || [0, 0, 0, 0, 0];
+            return '<div class="stack-row"><b>' + esc(c.co) + '</b>' + stack(dd.map(function (n, i) {
+              return { value: n, color: RATING_COLORS[i], label: (i + 1) + (labels[i + 1] ? ' (' + labels[i + 1] + ')' : '') };
+            })) + '</div>';
+          }).join('') + '</div><p class="tiny faint" style="margin:8px 0 0">Every statement answer, grouped by outcome.</p></div>';
+      }
+      html += '</div>';
+
+      html += '<h4 style="margin:4px 0 8px">Course outcomes</h4>' +
         '<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr>' +
         '<th>CO</th><th class="num hide-sm">Weight</th><th class="num">Avg rating</th>' +
         '<th style="width:24%">Indirect ≥ 70%</th><th style="width:24%">Direct ≥ 70%</th><th class="num">Gap</th>' +
         '</tr></thead><tbody>' +
-        d.cos.map(function (c) {
-          var gap = c.gap === null ? '—'
+        v.cos.map(function (c) {
+          var gap = c.gap === null || c.gap === undefined ? '—'
             : '<span class="badge ' + (Math.abs(c.gap) >= 20 ? 'red' : (Math.abs(c.gap) >= 10 ? 'gold' : 'grey')) + '">' +
               (c.gap > 0 ? '+' : '') + fmt(c.gap, 0) + '</span>';
           return '<tr><td><b>' + esc(c.co) + '</b>' + (c.description ? '<div class="tiny muted">' + esc(c.description) + '</div>' : '') + '</td>' +
@@ -839,31 +1037,34 @@ function drawIndirectTab(r) {
             '<td>' + meter(c.indirect) + '<div class="tiny muted">' + c.atLeast70 + ' of ' + c.answered + '</div></td>' +
             '<td>' + meter(c.direct, 'direct') + '</td>' +
             '<td class="num">' + gap + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
+        }).join('') + '</tbody></table></div>' +
+        '<p class="tiny faint" style="margin:-10px 0 18px">A positive gap means students rate themselves higher than their results show.' +
+        (key ? ' Direct attainment is for the whole class (the workbook doesn’t split it by section).' : '') + '</p>';
 
-      var rated = (d.statements || []).filter(function (s) { return s.average !== null; });
+      var rated = v.statements.filter(function (s) { return s.average !== null; });
       if (rated.length) {
         var sorted = rated.slice().sort(function (a, b2) { return a.average - b2.average; });
         var row = function (s) {
           return '<tr><td><span class="badge">' + esc(s.co) + '</span></td><td class="small">' + esc(s.text) + '</td>' +
+            '<td style="width:110px">' + meter(s.average / 5 * 100) + '</td>' +
             '<td class="num"><b>' + fmt(s.average, 2) + '</b></td><td class="num muted small">' + s.answered + '</td></tr>';
         };
         html += '<div class="grid2"><div><h4 style="margin:0 0 8px">Lowest-rated statements</h4><div class="table-wrap"><table>' +
-          '<thead><tr><th>CO</th><th>Statement</th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
+          '<thead><tr><th>CO</th><th>Statement</th><th></th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
           sorted.slice(0, 5).map(row).join('') + '</tbody></table></div></div>' +
           '<div><h4 style="margin:0 0 8px">Highest-rated statements</h4><div class="table-wrap"><table>' +
-          '<thead><tr><th>CO</th><th>Statement</th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
+          '<thead><tr><th>CO</th><th>Statement</th><th></th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
           sorted.slice(-3).reverse().map(row).join('') + '</tbody></table></div></div></div>';
       } else {
-        html += '<p class="small muted">No survey responses yet. Share the student link; results appear here within a few minutes of each response.</p>';
+        html += '<p class="small muted">No survey responses ' + (key ? 'from this section ' : '') +
+          'yet. Share the student link; results appear here within a few minutes of each response.</p>';
       }
 
-      var students = d.students || [];
-      var waiting = students.filter(function (s) { return !s.submitted; });
-      if (waiting.length && students.length) {
+      var waiting = v.students.filter(function (s) { return !s.submitted; });
+      if (waiting.length) {
         html += '<details style="margin-top:16px"><summary class="small"><b>' + waiting.length +
           '</b> student(s) haven’t answered yet</summary><div class="small" style="columns:2;margin-top:8px">' +
-          waiting.map(function (s) { return esc(s.name) + (s.section ? ' <span class="muted">(' + esc(s.section) + ')</span>' : ''); }).join('<br>') +
+          waiting.map(function (s) { return esc(s.name) + (s.section && !key ? ' <span class="muted">(' + esc(s.section) + ')</span>' : ''); }).join('<br>') +
           '</div></details>';
       }
     }
@@ -872,6 +1073,7 @@ function drawIndirectTab(r) {
 
   setContent(html);
   bindSemesterPicker();
+  bindSectionPicker(function () { drawIndirectTab(); });
   $('#indRefresh').addEventListener('click', function () { renderIndirectTab(true); });
   $$('[data-copy]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -884,6 +1086,256 @@ function drawIndirectTab(r) {
       }
     });
   });
+}
+
+/* ---------------------------- direct assessment ---------------------------- */
+
+var STANDINGS = [
+  { k: 'PASSED', label: 'Passed', color: C.green, badge: 'green' },
+  { k: 'CONDITIONAL', label: 'Conditional (4.00)', color: C.gold, badge: 'gold' },
+  { k: 'FAILED', label: 'Failed', color: C.red, badge: 'red' },
+  { k: 'INC', label: 'INC', color: C.orange, badge: 'gold' },
+  { k: 'DROPPED', label: 'Dropped', color: C.grey, badge: 'grey' },
+  { k: 'NONE', label: 'No scores yet', color: C.light, badge: 'grey' }
+];
+
+function renderDirectTab(refresh) {
+  loading(refresh === true ? 'Re-reading every class sheet…' : 'Reading the class sheets…');
+  call(refresh === true ? 'admin.direct.refresh' : 'admin.direct', { semesterId: S.admin ? S.admin.semesterId : '' })
+    .then(function (r) { S.direct = r; drawDirectTab(r); })
+    .catch(function (err) {
+      setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+    });
+}
+
+function drawDirectTab(r) {
+  r = r || S.direct;
+  var pass = r.passingPercent || 75;
+  var all = r.sections.filter(function (s) { return !s.error; });
+  var opts = all.map(function (s) { return { id: s.id, label: s.subjectCode + ' · ' + s.name, count: s.students.length }; });
+  var sel = all.filter(function (s) { return s.id === S.dashSection; })[0];
+  var secs = sel ? [sel] : all;
+
+  var html = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Direct assessment</h2>' +
+    '<div class="small muted">Exams, quizzes and every other requirement, from the class sheets · ' + esc(r.checkedAt) + '</div></div>' +
+    '<div class="spacer"></div>' + semesterPicker() + (opts.length ? sectionPicker(opts) : '') +
+    '<button class="btn" id="dirRefresh">↻ Refresh</button></div>';
+
+  r.sections.filter(function (s) { return s.error; }).forEach(function (s) {
+    html += '<div class="alert warn"><span class="ic">!</span><div><b>' + esc(s.subjectCode + ' · ' + s.name) + ':</b> ' + esc(s.error) + '</div></div>';
+  });
+
+  var students = [];
+  secs.forEach(function (s) { s.students.forEach(function (st) { students.push({ st: st, sec: s }); }); });
+  if (!students.length) {
+    html += empty('No students yet', 'Classes in this semester have no enrolled students.');
+    setContent(html);
+    bindSemesterPicker(); bindSectionPicker(function () { drawDirectTab(); });
+    $('#dirRefresh').addEventListener('click', function () { renderDirectTab(true); });
+    return;
+  }
+
+  // ---- headline numbers
+  var counts = {};
+  STANDINGS.forEach(function (x) { counts[x.k] = 0; });
+  students.forEach(function (x) { counts[x.st.standing] = (counts[x.st.standing] || 0) + 1; });
+  var graded = students.filter(function (x) { return x.st.standing !== 'NONE' && x.st.standing !== 'DROPPED'; });
+  var avgPct = avgOf(graded.map(function (x) { return x.st.percent; }));
+  var reqCount = secs.reduce(function (n, s) { return n + s.assessments.length; }, 0);
+  var filled = 0, slots = 0;
+  secs.forEach(function (s) {
+    s.students.forEach(function (st) {
+      if (st.standing === 'DROPPED') return;
+      st.scores.forEach(function (v) { slots++; if (v !== null) filled++; });
+    });
+  });
+
+  html += '<div class="card"><div class="card-body">' +
+    '<div class="stat-row" style="margin-bottom:18px">' +
+    '<div class="stat"><div class="v">' + students.length + '</div><div class="k">Students' + (sel ? '' : ' · ' + secs.length + ' classes') + '</div></div>' +
+    '<div class="stat"><div class="v">' + (avgPct === null ? '—' : fmt(avgPct, 0) + '%') + '</div><div class="k">Average running grade</div></div>' +
+    '<div class="stat"><div class="v">' + (graded.length ? fmt(pctOf(counts.PASSED, graded.length), 0) + '%' : '—') + '</div><div class="k">Passing (3.00 or better)</div></div>' +
+    '<div class="stat"><div class="v">' + reqCount + '</div><div class="k">Requirements</div></div>' +
+    '<div class="stat"><div class="v">' + (slots ? fmt(pctOf(filled, slots), 0) + '%' : '—') + '</div><div class="k">Scores recorded</div></div>' +
+    '</div>';
+
+  // grade distribution (transmuted grades)
+  var gcount = {};
+  graded.forEach(function (x) { if (x.st.grade !== null && x.st.grade !== undefined) gcount[fmt(x.st.grade, 2)] = (gcount[fmt(x.st.grade, 2)] || 0) + 1; });
+  var gkeys = Object.keys(gcount).sort(function (a, b) { return Number(a) - Number(b); });
+  var scaleKeys = ['1.00', '1.25', '1.50', '1.75', '2.00', '2.25', '2.50', '2.75', '3.00'];
+  scaleKeys.forEach(function (k) { if (gkeys.indexOf(k) < 0) gkeys.push(k); });
+  gkeys = gkeys.sort(function (a, b) { return Number(a) - Number(b); });
+
+  // average by requirement type
+  var byType = {};
+  secs.forEach(function (s) {
+    s.assessments.forEach(function (a, i) {
+      var t = byType[a.type] = byType[a.type] || { sum: 0, n: 0, pass: 0 };
+      s.students.forEach(function (st) {
+        var v = st.scores[i];
+        if (v === null || st.standing === 'DROPPED') return;
+        var p = v / a.max * 100;
+        t.sum += p; t.n++; if (p >= pass) t.pass++;
+      });
+    });
+  });
+  var types = Object.keys(byType).filter(function (t) { return byType[t].n; });
+
+  html += '<div class="charts">' +
+    donut('Standing', STANDINGS.filter(function (x) { return counts[x.k]; }).map(function (x) {
+      return { label: x.label, value: counts[x.k], color: x.color };
+    }), students.length + '', 'students') +
+    columns('Grade distribution', gkeys.map(function (k) {
+      var g = Number(k);
+      return { label: k, bars: [{ value: gcount[k] || 0, color: g <= 3 ? C.green : (g < 5 ? C.gold : C.red), title: k + ': ' + (gcount[k] || 0) + ' student(s)' }] };
+    }), { wide: true }) +
+    (types.length ? columns('Average score by requirement type', types.map(function (t) {
+      var x = byType[t];
+      return { label: t, bars: [
+        { value: x.sum / x.n, color: x.sum / x.n >= pass ? C.green : C.red, title: t + ': average ' + fmt(x.sum / x.n, 0) + '% over ' + x.n + ' scores' },
+        { value: x.pass / x.n * 100, color: C.gold, title: t + ': ' + fmt(x.pass / x.n * 100, 0) + '% of scores at ' + pass + '% or higher' }
+      ] };
+    }), { max: 100, unit: '%', target: pass, targetLabel: pass + '% pass mark',
+      series: [{ label: 'Average', color: C.green }, { label: 'Scores at ' + pass + '%+', color: C.gold }] }) : '') +
+    (!sel && secs.length > 1 ? columns('Classes compared', secs.map(function (s) {
+      var g2 = s.students.filter(function (st) { return st.standing !== 'NONE' && st.standing !== 'DROPPED'; });
+      var a2 = avgOf(g2.map(function (st) { return st.percent; }));
+      var p2 = g2.length ? g2.filter(function (st) { return st.standing === 'PASSED'; }).length / g2.length * 100 : null;
+      return { label: s.name, bars: [
+        { value: a2, color: C.green, title: s.subjectCode + ' · ' + s.name + ': average ' + fmt(a2, 0) + '%' },
+        { value: p2, color: C.gold, title: s.subjectCode + ' · ' + s.name + ': ' + fmt(p2, 0) + '% passing' }
+      ] };
+    }), { max: 100, unit: '%', target: pass, targetLabel: pass + '%',
+      series: [{ label: 'Average running grade', color: C.green }, { label: 'Passing', color: C.gold }] }) : '') +
+    '</div></div></div>';
+
+  // ---- requirements, grouped by subject (same-named requirements across sections are combined)
+  var subjects = {}, sorder = [];
+  secs.forEach(function (s) {
+    var k = s.subjectCode || s.name;
+    if (!subjects[k]) { subjects[k] = { code: s.subjectCode, title: s.subjectTitle, secs: [], reqs: {}, rorder: [] }; sorder.push(k); }
+    var sub = subjects[k];
+    sub.secs.push(s);
+    s.assessments.forEach(function (a, i) {
+      var rk = (a.type + '|' + a.name).toLowerCase();
+      if (!sub.reqs[rk]) { sub.reqs[rk] = { name: a.name, type: a.type, maxes: {}, date: a.date, published: a.published, pcts: [], missing: 0, perSec: [] }; sub.rorder.push(rk); }
+      var q = sub.reqs[rk];
+      q.maxes[a.max] = true;
+      if (a.date && (!q.date || a.date < q.date)) q.date = a.date;
+      var sp = [];
+      s.students.forEach(function (st) {
+        if (st.standing === 'DROPPED') return;
+        var v = st.scores[i];
+        if (v === null) { q.missing++; return; }
+        sp.push(v / a.max * 100);
+      });
+      q.pcts = q.pcts.concat(sp);
+      q.perSec.push({ name: s.name, avg: avgOf(sp), n: sp.length });
+    });
+  });
+
+  S.dirReqs = [];
+  sorder.forEach(function (k) {
+    var sub = subjects[k];
+    var reqs = sub.rorder.map(function (rk) { return sub.reqs[rk]; });
+    html += '<div class="card"><div class="card-head"><h3>' + esc(sub.code + (sub.title ? ' — ' + sub.title : '')) + '</h3>' +
+      '<div class="spacer"></div><span class="small muted">' + (sel ? esc(sel.name) : sub.secs.map(function (s) { return esc(s.name); }).join(', ')) + '</span></div>' +
+      '<div class="card-body">';
+    if (!reqs.length) {
+      html += '<p class="small muted">No requirements in this class sheet yet.</p></div></div>';
+      return;
+    }
+    html += '<p class="tiny faint" style="margin:0 0 8px">Bar = average score · shaded band = lowest to highest · line = ' + pass +
+      '% pass mark. Click a requirement to see how the scores are spread.</p>' +
+      '<div class="table-wrap"><table class="req-table"><thead><tr><th>Requirement</th><th class="hide-sm">Type</th>' +
+      '<th class="num hide-sm">Max</th><th class="num">Taken</th><th style="width:34%">Scores</th><th class="num">Avg</th><th class="num">≥ ' + pass + '%</th>' +
+      '</tr></thead><tbody>' +
+      reqs.map(function (q) {
+        var idx = S.dirReqs.push({ q: q, subject: sub.code }) - 1;
+        var mean = avgOf(q.pcts);
+        var lo = q.pcts.length ? Math.min.apply(null, q.pcts) : null;
+        var hi = q.pcts.length ? Math.max.apply(null, q.pcts) : null;
+        var passed = q.pcts.filter(function (p) { return p >= pass; }).length;
+        var maxes = Object.keys(q.maxes);
+        return '<tr class="clickable" data-req="' + idx + '"><td><b>' + esc(q.name) + '</b>' +
+          (q.date ? '<div class="tiny muted">' + esc(q.date) + '</div>' : '') +
+          (q.published === false ? ' <span class="badge grey">hidden</span>' : '') + '</td>' +
+          '<td class="hide-sm"><span class="badge">' + esc(q.type) + '</span></td>' +
+          '<td class="num hide-sm">' + (maxes.length === 1 ? fmtScore(maxes[0]) : 'varies') + '</td>' +
+          '<td class="num">' + q.pcts.length + '<span class="muted">/' + (q.pcts.length + q.missing) + '</span></td>' +
+          '<td>' + rangeBar(mean, lo, hi, pass) + '</td>' +
+          '<td class="num"><b>' + (mean === null ? '—' : fmt(mean, 0) + '%') + '</b></td>' +
+          '<td class="num">' + (q.pcts.length ? fmt(pctOf(passed, q.pcts.length), 0) + '%' : '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div><div class="req-detail" id="reqDetail-' + esc(k).replace(/[^A-Za-z0-9_-]/g, '') + '"></div></div></div>';
+  });
+
+  // ---- students to watch
+  var watch = students.filter(function (x) { return ['FAILED', 'CONDITIONAL', 'INC'].indexOf(x.st.standing) > -1; })
+    .sort(function (a, b) { return (a.st.percent === null ? -1 : a.st.percent) - (b.st.percent === null ? -1 : b.st.percent); });
+  html += '<div class="card"><div class="card-head"><h3>Students to watch</h3><div class="spacer"></div>' +
+    '<span class="small muted">Failed, Conditional or INC right now</span></div><div class="card-body">';
+  if (!watch.length) {
+    html += '<p class="small muted">Nobody is failing, conditional or incomplete at the moment.</p>';
+  } else {
+    var wrow = function (x) {
+      var missing = x.st.scores.filter(function (v) { return v === null; }).length;
+      var stg = STANDINGS.filter(function (s) { return s.k === x.st.standing; })[0];
+      return '<tr><td>' + esc(x.st.name) + '<div class="tiny muted">' + esc(x.st.id) + '</div></td>' +
+        '<td class="hide-sm small">' + esc(x.sec.subjectCode + ' · ' + x.sec.name) + '</td>' +
+        '<td style="width:22%">' + meter(x.st.percent) + '</td>' +
+        '<td class="num">' + (x.st.grade === null ? '—' : fmt(x.st.grade, 2)) + '</td>' +
+        '<td><span class="badge ' + stg.badge + '">' + esc(stg.label) + '</span></td>' +
+        '<td class="num">' + (missing ? '<span class="badge red">' + missing + '</span>' : '0') + '</td></tr>';
+    };
+    var head = '<div class="table-wrap"><table><thead><tr><th>Student</th><th class="hide-sm">Class</th><th>Running grade</th>' +
+      '<th class="num">Grade</th><th>Standing</th><th class="num">Missing</th></tr></thead><tbody>';
+    html += head + watch.slice(0, 15).map(wrow).join('') + '</tbody></table></div>';
+    if (watch.length > 15) {
+      html += '<details style="margin-top:10px"><summary class="small">Show all ' + watch.length + '</summary>' +
+        head + watch.slice(15).map(wrow).join('') + '</tbody></table></div></details>';
+    }
+  }
+  html += '</div></div>';
+
+  setContent(html);
+  bindSemesterPicker();
+  bindSectionPicker(function () { drawDirectTab(); });
+  $('#dirRefresh').addEventListener('click', function () { renderDirectTab(true); });
+  $$('tr[data-req]').forEach(function (tr) {
+    tr.addEventListener('click', function () {
+      var item = S.dirReqs[Number(this.dataset.req)];
+      var box = this.closest('.card-body').querySelector('.req-detail');
+      var was = this.classList.contains('on');
+      $$('tr[data-req]', this.closest('table')).forEach(function (x) { x.classList.remove('on'); });
+      if (was) { box.innerHTML = ''; return; }
+      this.classList.add('on');
+      box.innerHTML = requirementDetail(item.q, pass);
+    });
+  });
+}
+
+/** Score spread for one requirement: 10 bins + per-section averages. */
+function requirementDetail(q, pass) {
+  var bins = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  q.pcts.forEach(function (p) { bins[Math.min(9, Math.floor(Math.max(0, p) / 10))]++; });
+  var html = '<div class="charts">' +
+    columns(q.name + ' · how the scores are spread (by 10% steps)', bins.map(function (n, i) {
+      var lo = i * 10, hi = i === 9 ? 100 : i * 10 + 9;
+      return { label: lo + '%', bars: [{ value: n, color: hi < pass ? C.red : (lo >= pass ? C.green : C.gold), title: lo + '–' + hi + '%: ' + n + ' student(s)' }] };
+    }), { wide: true });
+  if (q.perSec.length > 1) {
+    html += columns('Average by section', q.perSec.map(function (s) {
+      return { label: s.name, bars: [{ value: s.avg, color: s.avg !== null && s.avg >= pass ? C.green : C.red, title: s.name + ': ' + fmt(s.avg, 0) + '% (' + s.n + ' scores)' }] };
+    }), { max: 100, unit: '%', target: pass, targetLabel: pass + '%' });
+  }
+  html += donut('Result', [
+    { label: 'At ' + pass + '% or higher', value: q.pcts.filter(function (p) { return p >= pass; }).length, color: C.green },
+    { label: 'Below ' + pass + '%', value: q.pcts.filter(function (p) { return p < pass; }).length, color: C.red },
+    { label: 'No score yet', value: q.missing, color: C.light }
+  ], q.pcts.length + '', 'scores');
+  return html + '</div>';
 }
 
 /* ------------------------------ classes tab ------------------------------ */

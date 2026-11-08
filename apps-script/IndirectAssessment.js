@@ -47,6 +47,11 @@ function pct_(v) {
   return isNaN(n) ? null : round_(n, 1);
 }
 
+/** Section names compared without spaces, dashes or case ("BSEE 2-A" = "bsee2a"). */
+function sectionKey_(v) {
+  return str_(v).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
 function studentKey_(v) {
   return str_(v).toLowerCase().replace(/\s+/g, '');
 }
@@ -169,6 +174,7 @@ function readIndirectWorkbook_(workbookId) {
     var rv = resp.getDataRange().getValues();
     var head = rv[0].map(function (x) { return str_(x); });
     var numCol = rowWhere_(head.map(function (x) { return [x]; }), function (r) { return /student number/i.test(r[0]); });
+    var rSecCol = head.indexOf('Section');
     var stmts = [];
     head.forEach(function (t, j) {
       var m = t.match(/^(CO\d+)\s*:\s*([\s\S]*?)\s*\[([\s\S]*)\]\s*$/i);
@@ -186,14 +192,44 @@ function readIndirectWorkbook_(workbookId) {
     }
     out.responders = Object.keys(latest);
     out.responses = out.responders.length;
+    // Section of each responder, from the form's "Section" answer.
+    var responderSection = {};
+    out.responders.forEach(function (id) {
+      responderSection[id] = rSecCol >= 0 ? sectionKey_(latest[id].row[rSecCol]) : '';
+    });
+    // dist[CO][sectionKey or '*'] = [count of 1s, 2s, 3s, 4s, 5s]
+    var dist = {};
+    var bump = function (co, sec, x) {
+      var d = dist[co] = dist[co] || {};
+      [sec, '*'].forEach(function (k) {
+        if (!k) return;
+        var a = d[k] = d[k] || [0, 0, 0, 0, 0];
+        a[x - 1]++;
+      });
+    };
     out.statements = stmts.map(function (s) {
-      var sum = 0, n = 0;
+      var sum = 0, n = 0, bySec = {};
       out.responders.forEach(function (id) {
         var x = rating_(latest[id].row[s.col], labels);
-        if (x !== null) { sum += x; n++; }
+        if (x === null) return;
+        sum += x; n++;
+        var r5 = Math.max(1, Math.min(5, Math.round(x)));
+        var sec = responderSection[id];
+        bump(s.co, sec, r5);
+        if (sec) {
+          var b = bySec[sec] = bySec[sec] || { sum: 0, n: 0 };
+          b.sum += x; b.n++;
+        }
       });
-      return { co: s.co, text: s.text, average: n ? round_(sum / n, 2) : null, answered: n };
+      var bySection = {};
+      Object.keys(bySec).forEach(function (k) {
+        bySection[k] = { average: round_(bySec[k].sum / bySec[k].n, 2), answered: bySec[k].n };
+      });
+      return { co: s.co, text: s.text, average: n ? round_(sum / n, 2) : null, answered: n, bySection: bySection };
     });
+    out.ratingDist = dist;
+    out.ratingLabels = {};
+    Object.keys(labels).forEach(function (t) { out.ratingLabels[labels[t]] = t.charAt(0).toUpperCase() + t.slice(1); });
   }
 
   // ---- Comparison: direct vs indirect per CO
@@ -289,7 +325,7 @@ function indirectDashboard_(session, semesterId) {
     block.sections = g.sections.map(function (sec) {
       var ids = enrolled[sec.id] || [];
       var answered = ids.filter(function (id) { return responders[id]; }).length;
-      return { name: sec.name, enrolled: ids.length, answered: answered };
+      return { id: sec.id, key: sectionKey_(sec.name), name: sec.name, enrolled: ids.length, answered: answered };
     });
     return block;
   });

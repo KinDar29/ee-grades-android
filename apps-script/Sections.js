@@ -364,6 +364,7 @@ function setFinalStatus_(session, sectionId, studentId, status) {
     if (row && !st) sh.deleteRow(row._row);
     else if (row) updateObject_(sh, row._row, { 'Status': st, 'Updated': nowStamp_() });
     else if (st) appendObject_(sh, { 'Student ID': sid, 'Status': st, 'Updated': nowStamp_() });
+    clearSectionSnapshot_(sectionId);
     logAction_(session.id, session.role, 'FINAL_STATUS', sectionId, { student: sid, status: st || '(cleared)' });
     return { studentId: sid, status: st };
   });
@@ -435,7 +436,7 @@ function sectionSnapshot_(sectionId) {
 }
 
 function clearSectionSnapshot_(sectionId) {
-  try { CacheService.getScriptCache().remove(snapshotKey_(sectionId)); } catch (err) { /* ignore */ }
+  try { CacheService.getScriptCache().removeAll([snapshotKey_(sectionId), directKey_(sectionId)]); } catch (err) { /* ignore */ }
 }
 
 /** Per-assessment class statistics. */

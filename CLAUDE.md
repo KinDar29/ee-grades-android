@@ -67,6 +67,18 @@ change log at the bottom for every change you ship.
   Indirect Assessment, Survey Responses, Comparison, Survey Items, found by
   their labels — cached 5 min (↻ Refresh clears it). `checkIndirectAssessment()`
   logs the same data from the editor.
+- `DirectAssessment.js` — admin "Direct assessment" tab (`admin.direct`,
+  `admin.direct.refresh`): every class's requirements + per-student scores,
+  percent, grade and standing for a semester, cached 5 min per class
+  (`direct:<sectionId>`, cleared by `clearSectionSnapshot_`, which every portal
+  score/requirement/enrolment/final-status change calls). Charts are drawn in
+  the browser (`App.html` chart helpers: `donut`, `columns`, `stack`,
+  `rangeBar` — plain HTML/SVG, theme colours, no libraries). The section
+  dropdown (`S.dashSection`, "All sections · all students" = '') is shared by
+  the Direct and Indirect tabs; the indirect one filters by section name
+  (`sectionKey_`: letters/digits only) and the workbook's per-section data
+  (`statements[].bySection`, `ratingDist`). Direct CO attainment comes only
+  class-wide from the workbook's Comparison tab.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -181,3 +193,8 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   who hasn't answered) read from the Course Outcome Assessment Workbook.
 - **2026-11-08** — App (still 1.2.0, unreleased): survey card on the class page;
   INC / Dropped / Conditional / Failed labels in the admin roster.
+- **2026-11-08** — Portal (not deployed yet): new admin "Direct assessment"
+  dashboard (standing donut, grade distribution, average by requirement type,
+  classes compared, every requirement with score range + spread on click,
+  students to watch); charts added to "Indirect assessment"; section dropdown
+  with "All sections · all students" on both.
