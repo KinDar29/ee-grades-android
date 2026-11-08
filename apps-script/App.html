@@ -1146,9 +1146,116 @@ function indirectView(b, key) {
   return v;
 }
 
-function drawIndirectTab(r) {
-  r = r || S.indirect;
-  // dropdown: every section that has a survey
+/** The pieces of one subject block: on screen they go in one card, in the PDF each piece is laid out on its own. */
+function indirectParts(b, key, forPdf) {
+  var v = indirectView(b, key);
+  var d = b.data;
+  var parts = [];
+
+  var first = b.error ? '<div class="alert warn"><span class="ic">!</span><div>' + esc(b.error) + '</div></div>' : '';
+  var rate = v.enrolled ? Math.round(v.answered / v.enrolled * 100) : 0;
+  var o = v.overall;
+  first += '<div class="charts">' +
+    donut('Survey responses', [
+      { label: 'Answered', value: v.answered, color: C.green },
+      { label: 'Not yet', value: Math.max(0, v.enrolled - v.answered), color: C.light }
+    ], rate + '%', v.answered + ' of ' + v.enrolled);
+  if (o && o.answered) {
+    first += donut('Overall self-rating', [
+      { label: 'At least 70%', value: o.atLeast70, color: C.green },
+      { label: 'Below 70%', value: Math.max(0, o.answered - o.atLeast70), color: C.gold }
+    ], o.indirect === null ? '—' : fmt(o.indirect, 0) + '%', 'rate ≥ 70%');
+  }
+  if (!key && v.sections.length > 1) {
+    first += columns('Response rate by section', v.sections.map(function (s) {
+      return { label: s.name, bars: [{ value: s.enrolled ? s.answered / s.enrolled * 100 : 0, color: C.green, title: s.name + ': ' + s.answered + ' of ' + s.enrolled + ' answered' }] };
+    }), { max: 100, unit: '%' });
+  }
+  first += '</div>';
+  parts.push(first);
+
+  if (!d || !v.cos.length) return parts;
+
+  var row2 = '<div class="charts">' +
+    columns('Course outcome attainment: indirect vs direct', v.cos.map(function (c) {
+      return {
+        label: c.co, bars: [
+          { value: c.indirect, color: C.green, title: c.co + ' indirect: ' + fmt(c.indirect, 0) + '% rate themselves ≥ 70%' },
+          { value: c.direct, color: C.gold, title: c.co + ' direct: ' + fmt(c.direct, 0) + '% reached 70% on assessments' }
+        ]
+      };
+    }), {
+      max: 100, unit: '%', target: 70, targetLabel: '70% target',
+      series: [{ label: 'Indirect (self-rating ≥ 70%)', color: C.green }, { label: 'Direct (assessments ≥ 70%)' + (key ? ' · whole class' : ''), color: C.gold }]
+    });
+  var labels = d.ratingLabels || {};
+  var hasDist = v.cos.some(function (c) { return v.dist[c.co] && v.dist[c.co].some(function (n) { return n; }); });
+  if (hasDist) {
+    row2 += '<div class="chart-box"><div class="chart-title">How students rated each outcome</div>' +
+      legend([1, 2, 3, 4, 5].map(function (n) { return { label: n + (labels[n] ? ' · ' + labels[n] : ''), color: RATING_COLORS[n - 1] }; })) +
+      '<div class="stack-rows">' + v.cos.map(function (c) {
+        var dd = v.dist[c.co] || [0, 0, 0, 0, 0];
+        return '<div class="stack-row"><b>' + esc(c.co) + '</b>' + stack(dd.map(function (n, i) {
+          return { value: n, color: RATING_COLORS[i], label: (i + 1) + (labels[i + 1] ? ' (' + labels[i + 1] + ')' : '') };
+        })) + '</div>';
+      }).join('') + '</div><p class="tiny faint" style="margin:8px 0 0">Every statement answer, grouped by outcome.</p></div>';
+  }
+  parts.push(row2 + '</div>');
+
+  parts.push('<h4 style="margin:4px 0 8px">Course outcomes</h4>' +
+    '<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr>' +
+    '<th>CO</th><th class="num' + (forPdf ? '' : ' hide-sm') + '">Weight</th><th class="num">Avg rating</th>' +
+    '<th style="width:24%">Indirect ≥ 70%</th><th style="width:24%">Direct ≥ 70%</th><th class="num">Gap</th>' +
+    '</tr></thead><tbody>' +
+    v.cos.map(function (c) {
+      var gap = c.gap === null || c.gap === undefined ? '—'
+        : '<span class="badge ' + (Math.abs(c.gap) >= 20 ? 'red' : (Math.abs(c.gap) >= 10 ? 'gold' : 'grey')) + '">' +
+          (c.gap > 0 ? '+' : '') + fmt(c.gap, 0) + '</span>';
+      return '<tr><td><b>' + esc(c.co) + '</b>' + (c.description ? '<div class="tiny muted">' + esc(c.description) + '</div>' : '') + '</td>' +
+        '<td class="num' + (forPdf ? '' : ' hide-sm') + '">' + (c.weight === null ? '—' : fmt(c.weight, 1) + '%') + '</td>' +
+        '<td class="num">' + (c.averageRating === null ? '—' : fmt(c.averageRating, 2) + ' / 5') + '</td>' +
+        '<td>' + meter(c.indirect) + '<div class="tiny muted">' + c.atLeast70 + ' of ' + c.answered + '</div></td>' +
+        '<td>' + meter(c.direct, 'direct') + '</td>' +
+        '<td class="num">' + gap + '</td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<p class="tiny faint" style="margin:-10px 0 18px">A positive gap means students rate themselves higher than their results show.' +
+    (key ? ' Direct attainment is for the whole class (the workbook doesn’t split it by section).' : '') + '</p>');
+
+  var rated = v.statements.filter(function (s) { return s.average !== null; });
+  var row = function (s) {
+    return '<tr><td><span class="badge">' + esc(s.co) + '</span></td><td class="small">' + esc(s.text) + '</td>' +
+      '<td style="width:110px">' + meter(s.average / 5 * 100) + '</td>' +
+      '<td class="num"><b>' + fmt(s.average, 2) + '</b></td><td class="num muted small">' + s.answered + '</td></tr>';
+  };
+  var head = '<thead><tr><th>CO</th><th>Statement</th><th></th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>';
+  if (rated.length && forPdf) {
+    // the report lists every statement, in outcome order
+    parts.push('<h4 style="margin:0 0 8px">Survey statements (average rating out of 5)</h4><div class="table-wrap"><table>' +
+      head + rated.map(row).join('') + '</tbody></table></div>');
+  } else if (rated.length) {
+    var sorted = rated.slice().sort(function (a, b2) { return a.average - b2.average; });
+    parts.push('<div class="grid2"><div><h4 style="margin:0 0 8px">Lowest-rated statements</h4><div class="table-wrap"><table>' +
+      head + sorted.slice(0, 5).map(row).join('') + '</tbody></table></div></div>' +
+      '<div><h4 style="margin:0 0 8px">Highest-rated statements</h4><div class="table-wrap"><table>' +
+      head + sorted.slice(-3).reverse().map(row).join('') + '</tbody></table></div></div></div>');
+  } else {
+    parts.push('<p class="small muted">No survey responses ' + (key ? 'from this section ' : '') +
+      'yet. Share the student link; results appear here within a few minutes of each response.</p>');
+  }
+
+  var waiting = v.students.filter(function (s) { return !s.submitted; });
+  if (waiting.length) {
+    var names = waiting.map(function (s) { return esc(s.name) + (s.section && !key ? ' <span class="muted">(' + esc(s.section) + ')</span>' : ''); }).join('<br>');
+    parts.push(forPdf
+      ? '<h4 style="margin:0 0 8px">' + waiting.length + ' student(s) haven’t answered yet</h4><div class="small" style="columns:3">' + names + '</div>'
+      : '<details style="margin-top:16px"><summary class="small"><b>' + waiting.length +
+        '</b> student(s) haven’t answered yet</summary><div class="small" style="columns:2;margin-top:8px">' + names + '</div></details>');
+  }
+  return parts;
+}
+
+/** Dropdown options + the chosen one, shared by the screen and the PDF. */
+function indirectSelection(r) {
   var seen = {}, opts = [];
   r.blocks.forEach(function (b) {
     b.sections.forEach(function (s) {
@@ -1158,14 +1265,20 @@ function drawIndirectTab(r) {
     });
   });
   var sel = opts.filter(function (o) { return o.id === S.dashSection; })[0];
-  var key = sel ? sel.key : '';
+  return { opts: opts, sel: sel, key: sel ? sel.key : '' };
+}
+
+function drawIndirectTab(r) {
+  r = r || S.indirect;
+  var pick = indirectSelection(r), sel = pick.sel, key = pick.key;
 
   var html = '<div class="row wrap" style="margin-bottom:16px">' +
     '<div><h2 style="font-size:20px">Indirect assessment</h2>' +
     '<div class="small muted">Students’ self-ratings of the course outcomes, from each class’s survey. ' +
     'Read from the course outcome assessment workbook · ' + esc(r.checkedAt) + '</div></div>' +
-    '<div class="spacer"></div>' + semesterPicker() + (opts.length ? sectionPicker(opts) : '') +
-    '<button class="btn" id="indRefresh">↻ Refresh</button></div>';
+    '<div class="spacer"></div>' + semesterPicker() + (pick.opts.length ? sectionPicker(pick.opts) : '') +
+    '<button class="btn" id="indRefresh">↻ Refresh</button>' +
+    (r.blocks.length ? '<button class="btn gold" id="indPdf">⬇ Download PDF</button>' : '') + '</div>';
 
   if (!r.blocks.length) {
     html += empty('No survey linked yet',
@@ -1174,120 +1287,20 @@ function drawIndirectTab(r) {
 
   r.blocks.forEach(function (b) {
     if (key && !b.sections.some(function (s) { return s.key === key; })) return;
-    var v = indirectView(b, key);
-    var d = b.data;
     html += '<div class="card"><div class="card-head"><h3>' + esc(b.subject) +
       (sel ? ' <span class="badge">' + esc(sel.label.split(' · ').pop()) + '</span>' : '') + '</h3><div class="spacer"></div>' +
       (b.surveyUrl ? '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(b.surveyUrl) + '">Open the form ↗</a> ' +
         '<button class="btn sm" data-copy="' + esc(b.surveyUrl) + '">Copy student link</button> ' : '') +
       (b.workbookUrl ? '<a class="btn sm ghost" target="_blank" rel="noopener" href="' + esc(b.workbookUrl) + '">Workbook ↗</a>' : '') +
-      '</div><div class="card-body">';
-
-    if (b.error) {
-      html += '<div class="alert warn"><span class="ic">!</span><div>' + esc(b.error) + '</div></div>';
-    }
-
-    var rate = v.enrolled ? Math.round(v.answered / v.enrolled * 100) : 0;
-    var o = v.overall;
-    html += '<div class="charts">' +
-      donut('Survey responses', [
-        { label: 'Answered', value: v.answered, color: C.green },
-        { label: 'Not yet', value: Math.max(0, v.enrolled - v.answered), color: C.light }
-      ], rate + '%', v.answered + ' of ' + v.enrolled);
-    if (o && o.answered) {
-      html += donut('Overall self-rating', [
-        { label: 'At least 70%', value: o.atLeast70, color: C.green },
-        { label: 'Below 70%', value: Math.max(0, o.answered - o.atLeast70), color: C.gold }
-      ], o.indirect === null ? '—' : fmt(o.indirect, 0) + '%', 'rate ≥ 70%');
-    }
-    if (!key && v.sections.length > 1) {
-      html += columns('Response rate by section', v.sections.map(function (s) {
-        return { label: s.name, bars: [{ value: s.enrolled ? s.answered / s.enrolled * 100 : 0, color: C.green, title: s.name + ': ' + s.answered + ' of ' + s.enrolled + ' answered' }] };
-      }), { max: 100, unit: '%' });
-    }
-    html += '</div>';
-
-    if (d && v.cos.length) {
-      html += '<div class="charts">' +
-        columns('Course outcome attainment: indirect vs direct', v.cos.map(function (c) {
-          return {
-            label: c.co, bars: [
-              { value: c.indirect, color: C.green, title: c.co + ' indirect: ' + fmt(c.indirect, 0) + '% rate themselves ≥ 70%' },
-              { value: c.direct, color: C.gold, title: c.co + ' direct: ' + fmt(c.direct, 0) + '% reached 70% on assessments' }
-            ]
-          };
-        }), {
-          max: 100, unit: '%', target: 70, targetLabel: '70% target',
-          series: [{ label: 'Indirect (self-rating ≥ 70%)', color: C.green }, { label: 'Direct (assessments ≥ 70%)' + (key ? ' · whole class' : ''), color: C.gold }]
-        });
-
-      var labels = d.ratingLabels || {};
-      var hasDist = v.cos.some(function (c) { return v.dist[c.co] && v.dist[c.co].some(function (n) { return n; }); });
-      if (hasDist) {
-        html += '<div class="chart-box"><div class="chart-title">How students rated each outcome</div>' +
-          legend([1, 2, 3, 4, 5].map(function (n) { return { label: n + (labels[n] ? ' · ' + labels[n] : ''), color: RATING_COLORS[n - 1] }; })) +
-          '<div class="stack-rows">' + v.cos.map(function (c) {
-            var dd = v.dist[c.co] || [0, 0, 0, 0, 0];
-            return '<div class="stack-row"><b>' + esc(c.co) + '</b>' + stack(dd.map(function (n, i) {
-              return { value: n, color: RATING_COLORS[i], label: (i + 1) + (labels[i + 1] ? ' (' + labels[i + 1] + ')' : '') };
-            })) + '</div>';
-          }).join('') + '</div><p class="tiny faint" style="margin:8px 0 0">Every statement answer, grouped by outcome.</p></div>';
-      }
-      html += '</div>';
-
-      html += '<h4 style="margin:4px 0 8px">Course outcomes</h4>' +
-        '<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr>' +
-        '<th>CO</th><th class="num hide-sm">Weight</th><th class="num">Avg rating</th>' +
-        '<th style="width:24%">Indirect ≥ 70%</th><th style="width:24%">Direct ≥ 70%</th><th class="num">Gap</th>' +
-        '</tr></thead><tbody>' +
-        v.cos.map(function (c) {
-          var gap = c.gap === null || c.gap === undefined ? '—'
-            : '<span class="badge ' + (Math.abs(c.gap) >= 20 ? 'red' : (Math.abs(c.gap) >= 10 ? 'gold' : 'grey')) + '">' +
-              (c.gap > 0 ? '+' : '') + fmt(c.gap, 0) + '</span>';
-          return '<tr><td><b>' + esc(c.co) + '</b>' + (c.description ? '<div class="tiny muted">' + esc(c.description) + '</div>' : '') + '</td>' +
-            '<td class="num hide-sm">' + (c.weight === null ? '—' : fmt(c.weight, 1) + '%') + '</td>' +
-            '<td class="num">' + (c.averageRating === null ? '—' : fmt(c.averageRating, 2) + ' / 5') + '</td>' +
-            '<td>' + meter(c.indirect) + '<div class="tiny muted">' + c.atLeast70 + ' of ' + c.answered + '</div></td>' +
-            '<td>' + meter(c.direct, 'direct') + '</td>' +
-            '<td class="num">' + gap + '</td></tr>';
-        }).join('') + '</tbody></table></div>' +
-        '<p class="tiny faint" style="margin:-10px 0 18px">A positive gap means students rate themselves higher than their results show.' +
-        (key ? ' Direct attainment is for the whole class (the workbook doesn’t split it by section).' : '') + '</p>';
-
-      var rated = v.statements.filter(function (s) { return s.average !== null; });
-      if (rated.length) {
-        var sorted = rated.slice().sort(function (a, b2) { return a.average - b2.average; });
-        var row = function (s) {
-          return '<tr><td><span class="badge">' + esc(s.co) + '</span></td><td class="small">' + esc(s.text) + '</td>' +
-            '<td style="width:110px">' + meter(s.average / 5 * 100) + '</td>' +
-            '<td class="num"><b>' + fmt(s.average, 2) + '</b></td><td class="num muted small">' + s.answered + '</td></tr>';
-        };
-        html += '<div class="grid2"><div><h4 style="margin:0 0 8px">Lowest-rated statements</h4><div class="table-wrap"><table>' +
-          '<thead><tr><th>CO</th><th>Statement</th><th></th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
-          sorted.slice(0, 5).map(row).join('') + '</tbody></table></div></div>' +
-          '<div><h4 style="margin:0 0 8px">Highest-rated statements</h4><div class="table-wrap"><table>' +
-          '<thead><tr><th>CO</th><th>Statement</th><th></th><th class="num">Avg</th><th class="num">n</th></tr></thead><tbody>' +
-          sorted.slice(-3).reverse().map(row).join('') + '</tbody></table></div></div></div>';
-      } else {
-        html += '<p class="small muted">No survey responses ' + (key ? 'from this section ' : '') +
-          'yet. Share the student link; results appear here within a few minutes of each response.</p>';
-      }
-
-      var waiting = v.students.filter(function (s) { return !s.submitted; });
-      if (waiting.length) {
-        html += '<details style="margin-top:16px"><summary class="small"><b>' + waiting.length +
-          '</b> student(s) haven’t answered yet</summary><div class="small" style="columns:2;margin-top:8px">' +
-          waiting.map(function (s) { return esc(s.name) + (s.section && !key ? ' <span class="muted">(' + esc(s.section) + ')</span>' : ''); }).join('<br>') +
-          '</div></details>';
-      }
-    }
-    html += '</div></div>';
+      '</div><div class="card-body">' + indirectParts(b, key, false).join('') + '</div></div>';
   });
 
   setContent(html);
   bindSemesterPicker();
   bindSectionPicker(function () { drawIndirectTab(); });
   $('#indRefresh').addEventListener('click', function () { renderIndirectTab(true); });
+  var pdfBtn = $('#indPdf');
+  if (pdfBtn) pdfBtn.addEventListener('click', function () { downloadIndirectPdf(r, this); });
   $$('[data-copy]').forEach(function (b) {
     b.addEventListener('click', function () {
       var text = this.dataset.copy;
@@ -1299,6 +1312,139 @@ function drawIndirectTab(r) {
       }
     });
   });
+}
+
+/* ------------------------------ PDF reports ------------------------------ */
+/*  Built in the browser: each piece of the report is drawn off-screen in the
+    light theme, turned into an image (html-to-image) and laid onto A4 pages
+    (pdf-lib), so the PDF looks exactly like the dashboard.                    */
+
+var PDF_LIBS = {
+  pdfLib: 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js',
+  htmlToImage: 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js'
+};
+
+function loadScriptOnce(url, globalName) {
+  if (window[globalName]) return Promise.resolve(window[globalName]);
+  return new Promise(function (resolve, reject) {
+    var s = document.createElement('script');
+    s.src = url;
+    s.onload = function () { window[globalName] ? resolve(window[globalName]) : reject(new Error('load')); };
+    s.onerror = function () { reject(new Error('The PDF tools could not be loaded. Check the connection and try again.')); };
+    document.head.appendChild(s);
+  });
+}
+
+function bytesToBase64(bytes) {
+  var bin = '', CH = 0x8000;
+  for (var i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+
+function downloadBytes(bytes, filename, mime) {
+  // Chrome ignores the name if it has characters like "–", so keep it plain ASCII.
+  filename = String(filename).replace(/[\u2013\u2014]/g, '-').replace(/\u00b7/g, ' ')
+    .normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim() || 'report.pdf';
+  var url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 10000);
+}
+
+/**
+ * pieces: [{ html, title? }] — `title` starts a new subject heading.
+ * Resolves with the PDF bytes.
+ */
+function buildReportPdf(title, subtitle, pieces) {
+  var box = document.createElement('div');
+  box.className = 'pdf-report';
+  document.body.appendChild(box);
+  var libs;
+  return Promise.all([
+    loadScriptOnce(PDF_LIBS.pdfLib, 'PDFLib'),
+    loadScriptOnce(PDF_LIBS.htmlToImage, 'htmlToImage')
+  ]).then(function (l) {
+    libs = { pdf: l[0], img: l[1] };
+    var all = [{ html: '<div class="pdf-title"><div class="pdf-brand">MMSU · Department of Electrical Engineering</div>' +
+      '<h1>' + esc(title) + '</h1><div class="small muted">' + esc(subtitle) + '</div></div>' }].concat(pieces);
+    box.innerHTML = all.map(function (p, i) {
+      return '<div class="pdf-piece" data-i="' + i + '">' +
+        (p.title ? '<h2 class="pdf-subject">' + esc(p.title) + '</h2>' : '') + p.html + '</div>';
+    }).join('');
+    var els = $$('.pdf-piece', box), shots = [];
+    var chain = Promise.resolve();
+    els.forEach(function (el) {
+      chain = chain.then(function () {
+        return libs.img.toPng(el, { pixelRatio: 2, backgroundColor: '#ffffff', skipFonts: true, cacheBust: false })
+          .then(function (png) { shots.push({ png: png, w: el.offsetWidth, h: el.offsetHeight }); });
+      });
+    });
+    return chain.then(function () { return shots; });
+  }).then(function (shots) {
+    var P = libs.pdf;
+    return P.PDFDocument.create().then(function (doc) {
+      doc.setTitle(title);
+      doc.setCreator('EE Grades Portal');
+      var W = 595.28, H = 841.89, M = 34, FOOT = 22, GAP = 8;
+      var cw = W - 2 * M;
+      var page = null, y = 0;
+      var jobs = shots.map(function (s) { return doc.embedPng(s.png).then(function (img) { return { img: img, s: s }; }); });
+      return Promise.all(jobs).then(function (imgs) {
+        imgs.forEach(function (it) {
+          var h = it.s.h * cw / it.s.w, w = cw;
+          var room = H - 2 * M - FOOT;
+          if (h > room) { w = w * room / h; h = room; }      // a very tall piece shrinks to one page
+          if (!page || y - h < M + FOOT) { page = doc.addPage([W, H]); y = H - M; }
+          page.drawImage(it.img, { x: M + (cw - w) / 2, y: y - h, width: w, height: h });
+          y -= h + GAP;
+        });
+        return doc.embedFont(P.StandardFonts.Helvetica);
+      }).then(function (font) {
+        var pages = doc.getPages();
+        pages.forEach(function (p, i) {
+          var t = 'EE Grades Portal · ' + title + ' · page ' + (i + 1) + ' of ' + pages.length;
+          p.drawText(t, { x: M, y: M - 12, size: 7.5, font: font, color: P.rgb(0.45, 0.5, 0.48) });
+        });
+        return doc.save();
+      });
+    });
+  }).then(function (bytes) {
+    box.remove();
+    return bytes;
+  }, function (err) {
+    box.remove();
+    throw err;
+  });
+}
+
+function downloadIndirectPdf(r, btn) {
+  var pick = indirectSelection(r), key = pick.key;
+  var sem = (S.admin.semesters.filter(function (s) { return s.id === S.admin.semesterId; })[0] || {}).name || '';
+  var who = pick.sel ? pick.sel.label : 'All sections · all students';
+  var pieces = [];
+  r.blocks.forEach(function (b) {
+    if (key && !b.sections.some(function (s) { return s.key === key; })) return;
+    indirectParts(b, key, true).forEach(function (html, i) {
+      pieces.push({ html: html, title: i === 0 ? b.subject + (pick.sel ? ' · ' + pick.sel.label.split(' · ').pop() : '') : '' });
+    });
+  });
+  busy(btn, true, 'Building the PDF…');
+  buildReportPdf('Indirect Assessment Report', [sem, who, 'Workbook read ' + r.checkedAt].filter(String).join(' · '), pieces)
+    .then(function (bytes) {
+      busy(btn, false);
+      var name = ('Indirect assessment - ' + sem + ' - ' + (pick.sel ? pick.sel.label.replace(' · ', ' ') : 'All sections'))
+        .replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() + '.pdf';
+      downloadBytes(bytes, name, 'application/pdf');
+      toast('PDF downloaded: ' + name);
+    })
+    .catch(function (err) {
+      busy(btn, false);
+      toast(err.message || 'The PDF could not be made.', 'error');
+    });
 }
 
 /* ---------------------------- direct assessment ---------------------------- */

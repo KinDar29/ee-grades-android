@@ -522,4 +522,20 @@ label.check input { width: auto; margin: 0; }
 .modal.pdf .body { background: var(--surface-2); padding: 12px; flex: 1; }
 .pdf-pages { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .pdf-pages canvas { max-width: 100%; height: auto; background: #fff; box-shadow: var(--shadow-sm); border-radius: 2px; }
+
+/* ------------------------------ PDF reports ------------------------------ */
+/* Off-screen, always in the light theme, captured piece by piece. */
+.pdf-report {
+  position: fixed; left: -20000px; top: 0; width: 1000px; padding: 0 4px; background: #fff;
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #fafbfa; --border: #e0e6e3; --border-strong: #c9d3ce;
+  --text: #13201a; --muted: #5f6f68; --faint: #8b9a94; --green-100: #e6f1ec; --gold-100: #fbf3dc;
+  --danger-bg: #fdf3f2; --warn-bg: #fffaeb; --ok-bg: #ecfdf3; --info-bg: #eef4ff;
+  color: var(--text); font-family: var(--font);
+}
+.pdf-piece { padding: 6px 4px; background: #fff; }
+.pdf-piece .charts, .pdf-piece .table-wrap { margin-bottom: 0 !important; }
+.pdf-title { border-bottom: 3px solid var(--green-700); padding-bottom: 10px; }
+.pdf-title h1 { font-size: 26px; margin: 4px 0 2px; color: var(--green-800); }
+.pdf-brand { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-600); font-weight: 700; }
+.pdf-subject { font-size: 18px; margin: 10px 0 10px; padding: 8px 12px; background: var(--green-100); border-radius: 8px; color: var(--green-800); }
 </style>
