@@ -210,6 +210,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   classes compared, every requirement with score range + spread on click,
   students to watch); charts added to "Indirect assessment"; section dropdown
   with "All sections · all students" on both.
-- **2026-11-08** — Course files (portal not deployed yet): Syllabus and TOS
+- **2026-11-08** — Portal deployment version 17. Course files: Syllabus and TOS
   for Midterm / Final Exam uploaded per class by the admin, viewed by enrolled
   students in the portal (pdf.js) and in the app (still 1.2.0, unreleased).
