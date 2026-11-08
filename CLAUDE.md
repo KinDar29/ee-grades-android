@@ -106,6 +106,11 @@ Rules that matter:
   notification via `notify/ScoreNotifier` (lock screen shows no details).
   Opening a class marks its scores as seen. Students are asked once for the
   Android 13+ notification permission (`NewScoreNotificationsSetup` in AppRoot).
+- Class page shows a "Course outcome self-assessment" card when `student.class`
+  returns `survey` (opens the Google Form in the browser; ✓ when submitted).
+- Admin roster rows show the `standing` label for INC / Dropped / Conditional /
+  Failed. The admin area in the app stays read-only (no editing, exports,
+  Summary of Grades or indirect dashboard — those are portal-only).
 
 ## Releasing the Android app
 
@@ -174,3 +179,5 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   with submitted status; admin "Indirect assessment" dashboard (response rates by
   section, CO self-ratings, indirect vs direct ≥ 70%, lowest/highest statements,
   who hasn't answered) read from the Course Outcome Assessment Workbook.
+- **2026-11-08** — App (still 1.2.0, unreleased): survey card on the class page;
+  INC / Dropped / Conditional / Failed labels in the admin roster.

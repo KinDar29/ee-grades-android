@@ -404,6 +404,15 @@ private fun RosterRow(entry: RosterEntry) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                standingLabel(entry.standing)?.let { (label, alert) ->
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (alert) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.tertiary
+                    )
+                }
             }
             Spacer(Modifier.width(10.dp))
             Column(horizontalAlignment = Alignment.End) {
@@ -422,4 +431,13 @@ private fun RosterRow(entry: RosterEntry) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
+}
+
+/** Only the standings an admin needs to notice; PASSED / NONE show nothing. */
+private fun standingLabel(standing: String): Pair<String, Boolean>? = when (standing.uppercase()) {
+    "INC" -> "INC — incomplete" to true
+    "DROPPED" -> "Dropped" to true
+    "CONDITIONAL" -> "Conditional (4.00)" to false
+    "FAILED" -> "Failed" to true
+    else -> null
 }

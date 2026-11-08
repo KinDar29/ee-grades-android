@@ -210,7 +210,16 @@ data class StudentClass(
     val classSize: Int = 0,
     val grade: Grade = Grade(),
     val showRunningGrade: Boolean = true,
-    val showClassAverage: Boolean = true
+    val showClassAverage: Boolean = true,
+    /** Course-outcome self-assessment survey, or null when the class has none. */
+    val survey: Survey? = null
+)
+
+/** `submitted` is null when the portal can't tell (no workbook linked). */
+@Serializable
+data class Survey(
+    val url: String = "",
+    val submitted: Boolean? = null
 )
 
 @Serializable
@@ -251,7 +260,9 @@ data class RosterEntry(
     val studentId: String = "",
     val lastName: String = "",
     val firstName: String = "",
-    val grade: Grade = Grade()
+    val grade: Grade = Grade(),
+    /** PASSED, CONDITIONAL, FAILED, INC, DROPPED or NONE (portal `standingOf_`). */
+    val standing: String = ""
 ) {
     val displayName: String
         get() = listOf(lastName, firstName)
