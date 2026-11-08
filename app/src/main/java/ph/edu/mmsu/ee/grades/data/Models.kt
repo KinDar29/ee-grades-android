@@ -212,7 +212,28 @@ data class StudentClass(
     val showRunningGrade: Boolean = true,
     val showClassAverage: Boolean = true,
     /** Course-outcome self-assessment survey, or null when the class has none. */
-    val survey: Survey? = null
+    val survey: Survey? = null,
+    /** Syllabus / TOS PDFs the admin made visible (portal `courseFilesFor_`). */
+    val files: List<CourseFile> = emptyList()
+)
+
+@Serializable
+data class CourseFile(
+    val kind: String = "",
+    val label: String = "",
+    val name: String = "",
+    val size: Long = 0,
+    val uploaded: String = ""
+)
+
+/** `student.file` reply: the PDF as base64. */
+@Serializable
+data class CourseFileData(
+    val kind: String = "",
+    val label: String = "",
+    val name: String = "",
+    val mimeType: String = "application/pdf",
+    val data: String = ""
 )
 
 /** `submitted` is null when the portal can't tell (no workbook linked). */

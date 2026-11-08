@@ -397,8 +397,30 @@ class ClassViewModel : ViewModel() {
     var authLost by mutableStateOf<String?>(null)
         private set
 
+    /** Kind of the course file being downloaded, for the button's spinner. */
+    var openingFile by mutableStateOf<String?>(null)
+        private set
+
     private var sectionId: String = ""
     private var started = false
+
+    fun openFile(kind: String, dir: java.io.File, onReady: (java.io.File) -> Unit, onError: (String) -> Unit) {
+        if (openingFile != null) return
+        viewModelScope.launch {
+            openingFile = kind
+            try {
+                onReady(repo.downloadCourseFile(sectionId, kind, dir))
+            } catch (e: ApiException) {
+                if (e.authRequired) authLost = e.message else onError(e.message ?: "Could not open the file.")
+            } catch (e: OfflineException) {
+                onError(e.message ?: "Could not reach the portal.")
+            } catch (e: Exception) {
+                onError("Could not open the file.")
+            } finally {
+                openingFile = null
+            }
+        }
+    }
 
     fun start(id: String) {
         if (started) return

@@ -79,6 +79,15 @@ change log at the bottom for every change you ship.
   (`sectionKey_`: letters/digits only) and the workbook's per-section data
   (`statements[].bySection`, `ratingDist`). Direct CO attainment comes only
   class-wide from the workbook's Comparison tab.
+- `CourseFiles.js` — Syllabus / TOS (Midterm Exam) / TOS (Final Exam) PDFs
+  per class. Admin: "📄 Course files" on the class page (upload ≤ 10 MB PDF,
+  optionally to every section of the same subject that semester; replace;
+  "Shown to students" toggle; remove). Files live in the semester's Drive
+  folder → "Course Files" and are NOT shared — students get the bytes through
+  `student.file` (enrolled + visible only) and the page draws them with pdf.js
+  4.10.38 from cdnjs (falls back to Download). Master tab `CourseFiles`, one
+  row per class + kind; a Drive file is trashed when no row uses it.
+  `student.class` returns `files` (visible only).
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -123,6 +132,9 @@ Rules that matter:
 - Admin roster rows show the `standing` label for INC / Dropped / Conditional /
   Failed. The admin area in the app stays read-only (no editing, exports,
   Summary of Grades or indirect dashboard — those are portal-only).
+- Class page shows "Course files" (from `student.class` `files`); View downloads
+  through `student.file` into `cacheDir/course-files/` and opens the phone's
+  PDF viewer via the FileProvider `${applicationId}.files`.
 
 ## Releasing the Android app
 
@@ -198,3 +210,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   classes compared, every requirement with score range + spread on click,
   students to watch); charts added to "Indirect assessment"; section dropdown
   with "All sections · all students" on both.
+- **2026-11-08** — Portal deployment version 17. Course files: Syllabus and TOS
+  for Midterm / Final Exam uploaded per class by the admin, viewed by enrolled
+  students in the portal (pdf.js) and in the app (still 1.2.0, unreleased).
