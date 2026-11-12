@@ -25,6 +25,11 @@ change log at the bottom for every change you ship.
 - Root Drive folder: `ROOT_FOLDER` in `apps-script/Config.js`. The master
   spreadsheet ID and the token/pepper secrets live in **Script Properties**, not
   in code. Never put secrets in this repo — it is public.
+- Short link for people: **https://kindar29.github.io/ee-grades-android/**
+  (`docs/index.html`, GitHub Pages from `main` /docs) — forwards to the clean
+  `/exec` URL. Google adds `/u/1/` to links opened from Drive/Gmail, which
+  shows "Sorry, unable to open the file" in multi-account browsers; the short
+  link never does. Update it if the deployment ID ever changes.
 - Android app ID: `ph.edu.mmsu.ee.grades` (test builds: `ph.edu.mmsu.ee.grades.debug`)
 
 ---
@@ -228,3 +233,5 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   blank). Fixed Agbayani's Student ID (25-050550 → 25-050432; 25-050550 is
   Buenavista, BSECE) and added Buenavista's account (unique starting password,
   must change).
+- **2026-11-12** — Short link https://kindar29.github.io/ee-grades-android/
+  (GitHub Pages) that always opens the portal's clean address.
