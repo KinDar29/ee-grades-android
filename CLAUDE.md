@@ -222,3 +222,9 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-08** — Portal deployment version 18: "⬇ Download PDF" on the
   Indirect assessment tab (all charts and results for the chosen section or
   all sections, every survey statement, who hasn't answered).
+- **2026-11-12** — Data only: EE121 Final Exam scores entered from
+  `EE121_Final_Exam_Scores.xlsx` (Drive › EE121 Final Exam › 1 Results; /50,
+  official rule, doubled to the column's max of 100; no-sheet students left
+  blank). Fixed Agbayani's Student ID (25-050550 → 25-050432; 25-050550 is
+  Buenavista, BSECE) and added Buenavista's account (unique starting password,
+  must change).
