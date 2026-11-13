@@ -584,4 +584,18 @@ label.check input { width: auto; margin: 0; }
 .g-item:hover { background: var(--surface-2); }
 .g-item.on { background: var(--green-100); font-weight: 600; }
 @media (max-width: 800px) { .grader { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .g-right { max-height: 45vh; border-top: 1px solid var(--border); } }
+
+/* ------------------------------ exam guard ------------------------------- */
+body.exam-on .exam-qs, body.exam-on .exam-bar { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.exam-on .exam-qs img { pointer-events: none; -webkit-user-drag: none; }
+.exam-mark { position: fixed; inset: 0; z-index: 140; pointer-events: none; opacity: .13; background-repeat: repeat; }
+body.exam-hidden .exam-qs, body.exam-hidden .exam-bar { filter: blur(16px); }
+.exam-cover { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; padding: 16px;
+  background: rgba(8, 30, 22, .82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.exam-cover-box { max-width: 420px; width: 100%; background: var(--surface); color: var(--text); border-radius: var(--radius);
+  padding: 24px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.exam-cover-box h3 { margin: 6px 0 8px; }
+.exam-cover-box p { margin: 0 0 16px; color: var(--muted); }
+html:fullscreen, html:-webkit-full-screen { background: var(--bg); overflow: auto; }
+@media print { body.exam-on * { display: none !important; } body.exam-on::after { content: "Printing is turned off during the exam."; } }
 </style>

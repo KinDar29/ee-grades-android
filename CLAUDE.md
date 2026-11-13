@@ -142,8 +142,17 @@ change log at the bottom for every change you ship.
   `syncExamScores_` (on Release, on opening Results, hourly in
   `scheduledRosterSync` → `finalizeAndSyncExams_`), scaled to the column max.
   Admin: "🧪 Exams" → bank status/link, new exam, Results (status, score,
-  "left page" count, Reset attempt, Release scores, item analysis by question
-  and Unit × Level). Web portal only — the Android app doesn't show
+  "Left exam" count — live from the autosave while running, Reset attempt,
+  Release scores, item analysis by question and Unit × Level).
+  **Exam guard** (App.html `examGuardOn/Off`): full screen on Start (iPhones
+  can't — they still get the rest), one "exit" per trip away (tab/app switch,
+  leaving full screen, or losing focus > 1.2 s once the page had focus; a
+  full-screen exit within 1 s of entering is ignored), questions blurred
+  behind a "Back to the exam" cover, copy/cut/paste/right-click/selection and
+  print blocked, name + ID watermark (`S.profile`). Exam column `Max Exits`
+  (0 = never; added by `ensureColumns_`): the server locks on autosave or
+  submit once exits ≥ it — result `How` = `LOCKED` with the answers so far;
+  exits only go up. Reset lets the student start over. Web portal only — the Android app doesn't show
   assignments or exams yet.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
@@ -299,3 +308,8 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   "✎ Grade side by side" in Submissions: read the student's PDF (or switch to
   the problem set) and type the score in the same window; Enter saves and
   opens the next ungraded student.
+- **2026-11-14** — Portal deployment version 21: exam guard — exams open in
+  full screen, leaving (tab/app switch or full-screen exit) is counted and
+  blurs the questions until the student returns, copy/paste/right-click
+  off, student name + ID watermark, optional "lock after N exits" (default 3
+  on new exams) that submits the answers so far; "🔒 locked" in Results.
