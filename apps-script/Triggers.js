@@ -24,6 +24,13 @@ function scheduledRosterSync() {
     console.warn('Password e-mails: ' + err);
   }
 
+  // 1c. Exams: score attempts whose time ran out, push released scores.
+  try {
+    finalizeAndSyncExams_(60 * 1000);
+  } catch (err) {
+    console.warn('Exams: ' + err);
+  }
+
   // 2. Refresh enrollment counts, oldest first, inside a time budget.
   try {
     var sheet = tab_(TAB.SECTIONS);

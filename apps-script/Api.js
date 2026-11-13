@@ -91,6 +91,18 @@ function route_(action, p, token) {
 
     case 'student.class':
       return studentClass_(requireSession_(token), p.sectionId);
+    case 'student.assignment.submit':
+      return submitAssignment_(requireSession_(token, 'student'), p);
+    case 'student.submission':
+      return getSubmissionFile_(requireSession_(token, 'student'), p.sectionId, p.assignmentId, '');
+    case 'student.exam.start':
+      return startExam_(requireSession_(token, 'student'), p);
+    case 'student.exam.save':
+      return saveExamAnswers_(requireSession_(token, 'student'), p);
+    case 'student.exam.submit':
+      return submitExam_(requireSession_(token, 'student'), p);
+    case 'student.exam.image':
+      return examImage_(requireSession_(token, 'student'), p);
     case 'student.file':        // Android app 1.2.0: `kind` is the Material ID
     case 'student.material':
       return getMaterialFile_(requireSession_(token, 'student'), p.sectionId, p.id || p.kind);
@@ -156,6 +168,38 @@ function route_(action, p, token) {
       return removeMaterial_(requireSession_(token, 'admin'), p.sectionId, p.id);
     case 'admin.material':
       return getMaterialFile_(requireSession_(token, 'admin'), p.sectionId, p.id || p.kind);
+    case 'admin.assignments':
+      return adminAssignments_(requireSession_(token, 'admin'), p.sectionId);
+    case 'admin.assignment.create':
+      return createAssignment_(requireSession_(token, 'admin'), p);
+    case 'admin.assignment.update':
+      return updateAssignment_(requireSession_(token, 'admin'), p);
+    case 'admin.assignment.remove':
+      return removeAssignment_(requireSession_(token, 'admin'), p.sectionId, p.id);
+    case 'admin.submissions':
+      return adminSubmissions_(requireSession_(token, 'admin'), p.sectionId, p.assignmentId);
+    case 'admin.submissions.grade':
+      return gradeSubmissions_(requireSession_(token, 'admin'), p);
+    case 'admin.submissions.deleteGraded':
+      return deleteGradedFiles_(requireSession_(token, 'admin'), p.sectionId, p.assignmentId, !!p.dryRun);
+    case 'admin.submission':
+      return getSubmissionFile_(requireSession_(token, 'admin'), p.sectionId, p.assignmentId, p.studentId);
+    case 'admin.exams':
+      return adminExams_(requireSession_(token, 'admin'), p.sectionId);
+    case 'admin.exams.bank':
+      return createBank_(requireSession_(token, 'admin'), p.sectionId);
+    case 'admin.exam.create':
+      return createExam_(requireSession_(token, 'admin'), p);
+    case 'admin.exam.update':
+      return updateExam_(requireSession_(token, 'admin'), p);
+    case 'admin.exam.remove':
+      return removeExam_(requireSession_(token, 'admin'), p.sectionId, p.id);
+    case 'admin.exam.results':
+      return adminExamResults_(requireSession_(token, 'admin'), p.sectionId, p.examId);
+    case 'admin.exam.release':
+      return releaseExam_(requireSession_(token, 'admin'), p.sectionId, p.examId);
+    case 'admin.exam.reset':
+      return resetExamAttempt_(requireSession_(token, 'admin'), p.sectionId, p.examId, p.studentId);
     case 'admin.direct':
       return directDashboard_(requireSession_(token, 'admin'), p.semesterId, false);
     case 'admin.direct.refresh':
@@ -312,6 +356,8 @@ function studentClass_(session, sectionId) {
     },
     survey: surveyForStudent_(section, session.id),
     materials: materialsFor_(section.id, true),
+    assignments: studentAssignments_(section.id, me, data.assessments),
+    exams: studentExams_(section.id, me.studentId, data.assessments, me.scores),
     files: courseFilesFor_(section.id, true),
     items: items,
     classSize: data.roster.length,

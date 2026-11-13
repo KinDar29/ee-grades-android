@@ -105,6 +105,40 @@ change log at the bottom for every change you ship.
   `student.file` is the same call with `kind` = Material ID) and the page
   draws them with pdf.js 4.10.38 from cdnjs. `student.class` returns
   `materials` (released only) and the older `files` list for app 1.2.0.
+- `Submissions.js` — **Assignments**: per class (optionally all sibling
+  sections), title, instructions, due date/time (`'yyyy-MM-dd HH:mm'`,
+  Manila), optional linked material (problem set), allow-late, shown/hidden,
+  and a gradebook column (new by default; an existing column only if nobody
+  has a score in it — `columnHasScores_`, graded requirements are never
+  touched). Students upload one PDF ≤ 10 MB, replaceable until due (late only
+  if allowed, marked late). Uploads: Drive file + **appendObject_ without the
+  script lock** (deadline rush); latest row per student counts, the replaced
+  file is trashed. Files: semester folder → Submissions → "<subject> <section>"
+  → "<title>" (folder made at creation). Admin: "📝 Assignments" on the class
+  page → submissions table, View, type scores (→ `saveScores_`), "🗑 Delete
+  graded files" (dry-run count → confirm → trash files of students who have a
+  score; row keeps `File Deleted At`, score stays). Tabs `Assignments`,
+  `Submissions`.
+- `Exams.js` — **Exams**: question bank = one Google Sheet per subject (root →
+  "Question Banks", tab "Questions": ID, Unit, CO, Level, Question, A–D,
+  Answer, Image; blank IDs filled on check; tab `QuestionBanks` maps subject →
+  sheet). Exam = blueprint (count per Unit × Level), duration, open/close
+  window, show-score mode (`RELEASED` default / `IMMEDIATE`), own gradebook
+  column (max = items). Creation freezes the eligible questions into a pool
+  JSON (root → "Exams"; cached in CacheService in 90 KB chunks), so bank
+  edits never change a running exam. Each student: random draw, random order,
+  shuffled choices; answer key stays on the server; deadline = min(start +
+  duration, close) + 2 min grace, checked on the server. Start appends to
+  `ExamAttempts`, submit appends to `ExamResults` (no lock); autosave →
+  CacheService only (`ans:<attemptId>`, also localStorage in the browser).
+  Unsubmitted attempts past the deadline are scored from the autosave
+  (`finalizeExpired_`). Scores reach the gradebook only via
+  `syncExamScores_` (on Release, on opening Results, hourly in
+  `scheduledRosterSync` → `finalizeAndSyncExams_`), scaled to the column max.
+  Admin: "🧪 Exams" → bank status/link, new exam, Results (status, score,
+  "left page" count, Reset attempt, Release scores, item analysis by question
+  and Unit × Level). Web portal only — the Android app doesn't show
+  assignments or exams yet.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -241,7 +275,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   must change).
 - **2026-11-12** — Short link https://kindar29.github.io/ee-grades-android/
   (GitHub Pages) that always opens the portal's clean address.
-- **2026-11-14** — Materials (portal not deployed yet): modules, problem sets,
+- **2026-11-14** — Materials: modules, problem sets,
   syllabus and TOS as any number of PDFs per class, grouped by week/unit, with
   order, show/hide and show-from dates; replaces the fixed three course files
   (migrated automatically).
+- **2026-11-14** — Assignments with PDF submissions (grading, delete graded
+  files) and multiple-choice exams from a per-subject question bank (random
+  sets, timer, autosave, release, item analysis). Existing graded columns are
+  never written. `tab_` now survives two requests creating a new tab at once.
