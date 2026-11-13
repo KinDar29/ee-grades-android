@@ -530,7 +530,8 @@ function importStudents_(session, data) {
         payload['Password Updated'] = nowStamp_();
         payload['Created At'] = nowStamp_();
         newRows.push(headers.map(function (h) {
-          return payload[h] === undefined ? '' : payload[h];
+          var v = payload[h] === undefined ? '' : payload[h];
+          return TEXT_COLUMNS[str_(h)] ? asText_(v) : v;
         }));
         existing[id.toLowerCase()] = { _row: -1 };
         added++;
@@ -568,13 +569,13 @@ function writeEnrollmentIndex_(sectionId, semesterId, studentIds) {
   var keep = [];
   t.rows.forEach(function (r) {
     if (str_(r['Section ID']) === target) return;
-    keep.push([str_(r['Section ID']), str_(r['Student ID']),
+    keep.push([str_(r['Section ID']), asText_(str_(r['Student ID'])),
                str_(r['Semester ID']), str_(r['Synced At'])]);
   });
 
   var stamp = nowStamp_();
   (studentIds || []).forEach(function (sid) {
-    keep.push([target, String(sid), String(semesterId || ''), stamp]);
+    keep.push([target, asText_(String(sid)), String(semesterId || ''), stamp]);
   });
 
   var lastRow = sheet.getLastRow();

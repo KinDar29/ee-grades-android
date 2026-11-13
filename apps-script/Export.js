@@ -151,7 +151,7 @@ function buildClassRecordSheet_(sectionId) {
     var g = x.grade;
     var line = [
       i + 1,
-      x.student.studentId,
+      asText_(x.student.studentId),
       [str_(x.student.lastName), str_(x.student.firstName)].filter(String).join(', ')
     ];
     asm.forEach(function (a) {

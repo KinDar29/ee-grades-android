@@ -168,6 +168,11 @@ change log at the bottom for every change you ship.
 Rules that matter:
 - Writes to the master sheet go through `withLock_`. `rebuildRoster_` always
   takes the lock (the enrollment index is rewritten as a whole).
+- Student numbers must be written as text: `appendObject_` / `updateObject_`
+  apostrophe-prefix the `TEXT_COLUMNS` ('Student ID', 'Set Password'), and
+  bulk `setValues` of IDs go through `asText_()`. Otherwise Sheets turns IDs
+  like "06-5160" into dates (June 5160) — `updateObject_` rewrites the whole
+  row, so one missed path re-breaks an ID on the next login.
 - Students tab columns are found **by header name**. New columns added to
   `SCHEMA` are created automatically by `ensureColumns_` on first use.
 - Passwords: never reintroduce a shared default. New accounts get
@@ -326,3 +331,5 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14** — Portal deployment version 22: students can download only
   Problem-set materials; modules, syllabus, TOS and other materials are
   view-only in the portal (admins can still download everything).
+  Also: student numbers are always stored as text — "06-5160" had been saved
+  as the date June 5160 (owner's test account, deleted; no real student hit).
