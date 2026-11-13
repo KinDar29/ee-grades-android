@@ -47,6 +47,20 @@ change log at the bottom for every change you ship.
   `completePasswordReset_`, codes in CacheService), `resetSharedPasswords()`.
 - `Master.js` — semesters, subjects, sections, student registry, imports,
   enrollment index.
+- `Registration.js` — **self-registration**: "Create your account" on the
+  sign-in page (Settings `REGISTRATION_OPEN`, blank = on) → form (student
+  number `^\d{2}-\d{4,6}$`, names, program from existing Students programs,
+  year, e-mail, password, classes of the active semester) → 6-digit code
+  e-mailed (`register.start`; pending data + password hash in CacheService,
+  30 min) → `register.verify` creates the Students row (active at once, own
+  password, `Email Verified` + `Registered` stamped) and enrols via
+  `enrollStudents_`. **E-mail gate** for everyone else: students without
+  `Email Verified` get `MUST_EMAIL:` from `requireSession_` (Settings
+  `REQUIRE_EMAIL_VERIFY`, blank = on) until `account.email.send` /
+  `account.email.verify`; login/session return `mustVerifyEmail`. Limits: 5
+  codes/hour per number and per address, 150/hour portal-wide, 5 wrong tries.
+  The Android app does not handle `MUST_EMAIL` yet — students must verify in
+  the portal once before the app works.
 - `Sections.js` — per-section spreadsheets (Info / Grades / Assessments /
   Summary), assessment syncing, grade computation (`computeGrade_`).
 - New-score notifications: `student.updates` (`studentUpdates_` in `Api.js`)
@@ -333,3 +347,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   view-only in the portal (admins can still download everything).
   Also: student numbers are always stored as text — "06-5160" had been saved
   as the date June 5160 (owner's test account, deleted; no real student hit).
+- **2026-11-14** — (version 22) Student self-registration with e-mail
+  verification (owner's choices: active at once, students pick their
+  classes) and a one-time "confirm your e-mail" step for every existing
+  student before they can use the portal.

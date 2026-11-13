@@ -28,6 +28,7 @@ function call(action, payload) {
         if (parsed.ok) { resolve(parsed.data); return; }
         if (parsed.authRequired) { forceSignOut(parsed.error); }
         if (parsed.mustChangePassword && !document.querySelector('#pwSave')) { promptPasswordChange(true); }
+        else if (parsed.mustVerifyEmail && !document.querySelector('#evBox')) { S.needEmail = true; promptEmailVerify(); }
         reject(new Error(parsed.error || 'Something went wrong.'));
       })
       .withFailureHandler(function (err) {
@@ -188,6 +189,7 @@ document.addEventListener('DOMContentLoaded', function () {
         'Open the Apps Script editor and run <b>setUp()</b> once, then reload this page.</div></div>';
       return;
     }
+    updateRegLine();
     if (info.contactEmail) {
       $('#loginHelp').innerHTML = 'Trouble signing in? Contact <a href="mailto:' +
         esc(info.contactEmail) + '">' + esc(info.contactEmail) + '</a>';
@@ -209,8 +211,7 @@ function resumeSession() {
   call('session', {}).then(function (res) {
     S.profile = res.profile;
     showApp();
-    if (res.mustChangePassword) promptPasswordChange(true);
-    else route();
+    afterSignIn(res);
   }).catch(function () {
     saveToken('');
   });
@@ -226,7 +227,10 @@ function bindShell() {
     $('#loginUserLabel').textContent = admin ? 'E-mail address' : 'Student number';
     $('#loginUser').placeholder = admin ? 'you@mmsu.edu.ph' : 'e.g. 21-123456';
     $('#loginUser').type = admin ? 'email' : 'text';
+    updateRegLine();
   });
+
+  $('#regLink').addEventListener('click', function () { registerModal(); });
 
   $('#loginForm').addEventListener('submit', function (e) {
     e.preventDefault();
@@ -282,8 +286,7 @@ function doLogin() {
       saveToken(res.token);
       S.profile = res.profile;
       showApp();
-      if (res.mustChangePassword) promptPasswordChange(true);
-      else route();
+      afterSignIn(res);
     })
     .catch(function (err) {
       busy(btn, false);
@@ -298,6 +301,182 @@ function route() {
   if (!S.profile) return;
   if (S.profile.role === 'admin') renderAdmin();
   else renderStudentHome();
+}
+
+/* ======================= SIGN-IN GATES & REGISTRATION ===================== */
+
+/** After sign-in: own password first, then a confirmed e-mail, then the portal. */
+function afterSignIn(res) {
+  S.needEmail = !!res.mustVerifyEmail;
+  if (res.mustChangePassword) promptPasswordChange(true);
+  else if (S.needEmail) promptEmailVerify();
+  else route();
+}
+
+function updateRegLine() {
+  var line = $('#regLine');
+  if (!line) return;
+  line.classList.toggle('hidden', !(S.portal && S.portal.registrationOpen) || S.loginRole === 'admin');
+}
+
+function alertBox(kind, text) {
+  return '<div class="alert ' + kind + '"><span class="ic">' + (kind === 'error' ? '!' : (kind === 'ok' ? '✓' : 'i')) +
+    '</span><div>' + esc(text) + '</div></div>';
+}
+
+/** Existing students: confirm an e-mail address with a code before going on. */
+function promptEmailVerify() {
+  if (document.querySelector('#evBox')) return;
+  var current = (S.profile && S.profile.email) || '';
+  openModal({
+    title: 'Confirm your e-mail address',
+    locked: true,
+    body:
+      '<div id="evBox">' +
+      '<p class="small" style="margin-top:0">Before you continue, add an e-mail address you check. ' +
+        'We\'ll send it a 6-digit code. It is where your password-reset codes will go if you ever forget your password.</p>' +
+      '<div class="field"><label for="evEmail">E-mail address</label>' +
+        '<input type="email" id="evEmail" autocomplete="email" placeholder="e.g. juan.delacruz@gmail.com" value="' + esc(current) + '">' +
+        (current ? '<span class="hint">This is the address we have on file. Change it if it is wrong or old.</span>' : '') + '</div>' +
+      '<div id="evStep2" class="hidden"><div class="field"><label for="evCode">Code from the e-mail</label>' +
+        '<input type="text" id="evCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"></div></div>' +
+      '<div id="evMsg"></div></div>',
+    footer:
+      '<button class="btn ghost" id="evOut">Sign out</button><div class="spacer"></div>' +
+      '<button class="btn hidden" id="evResend">Send a new code</button>' +
+      '<button class="btn primary" id="evSend">Send code</button>' +
+      '<button class="btn primary hidden" id="evVerify">Confirm</button>',
+    onMount: function (root, close) {
+      var msg = root.querySelector('#evMsg'), email = root.querySelector('#evEmail');
+      function send(btn) {
+        msg.innerHTML = '';
+        busy(btn, true, 'Sending…');
+        call('account.email.send', { email: email.value.trim() }).then(function (r) {
+          busy(btn, false);
+          msg.innerHTML = alertBox('info', 'We sent a code to ' + r.sentTo + '. It expires in ' + r.minutes +
+            ' minutes. Not there? Check your spam or promotions folder.');
+          root.querySelector('#evStep2').classList.remove('hidden');
+          root.querySelector('#evVerify').classList.remove('hidden');
+          root.querySelector('#evResend').classList.remove('hidden');
+          root.querySelector('#evSend').classList.add('hidden');
+          root.querySelector('#evCode').focus();
+        }).catch(function (err) { busy(btn, false); msg.innerHTML = alertBox('error', err.message); });
+      }
+      root.querySelector('#evSend').addEventListener('click', function () { send(this); });
+      root.querySelector('#evResend').addEventListener('click', function () { send(this); });
+      email.addEventListener('input', function () {
+        // a different address needs a new code
+        root.querySelector('#evSend').classList.remove('hidden');
+        root.querySelector('#evVerify').classList.add('hidden');
+        root.querySelector('#evResend').classList.add('hidden');
+      });
+      root.querySelector('#evCode').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); root.querySelector('#evVerify').click(); }
+      });
+      root.querySelector('#evVerify').addEventListener('click', function () {
+        var btn = this;
+        msg.innerHTML = '';
+        busy(btn, true, 'Checking…');
+        call('account.email.verify', { code: root.querySelector('#evCode').value.trim() }).then(function (r) {
+          S.needEmail = false;
+          if (r.profile) S.profile = r.profile;
+          close();
+          toast('E-mail confirmed. Thank you!');
+          route();
+        }).catch(function (err) { busy(btn, false); msg.innerHTML = alertBox('error', err.message); });
+      });
+      root.querySelector('#evOut').addEventListener('click', function () { saveToken(''); location.reload(); });
+    }
+  });
+}
+
+/** New students: fill in the form, confirm the e-mailed code, signed in. */
+function registerModal() {
+  var M = openModal({
+    title: 'Create your student account',
+    wide: true,
+    body: '<div class="loading"><span class="spinner"></span> Loading…</div>',
+    footer: '<button class="btn" data-close="1">Cancel</button><div class="spacer"></div>' +
+      '<button class="btn primary" id="rgNext" disabled>Send verification code</button>'
+  });
+  var root = M.root, body = root.querySelector('.body'), form = null;
+
+  call('register.options', {}).then(function (o) {
+    if (!o.open) {
+      body.innerHTML = alertBox('info', 'Registration is closed. Please contact your instructor.');
+      return;
+    }
+    form = o;
+    var opt = function (list, ph) {
+      return '<option value="">' + ph + '</option>' + list.map(function (v) { return '<option>' + esc(v) + '</option>'; }).join('');
+    };
+    body.innerHTML =
+      '<div id="rgStep1">' +
+      '<p class="small" style="margin-top:0">Fill in your details exactly as they appear in your school records. ' +
+        'We\'ll e-mail you a code to confirm your address, and then you can sign in right away.</p>' +
+      '<div class="grid2">' +
+        '<div class="field"><label for="rgId">Student number</label><input type="text" id="rgId" placeholder="e.g. 25-050366" autocomplete="username" inputmode="numeric"></div>' +
+        '<div class="field"><label for="rgEmail">E-mail address</label><input type="email" id="rgEmail" autocomplete="email" placeholder="e.g. juan.delacruz@gmail.com"></div>' +
+        '<div class="field"><label for="rgLast">Last name</label><input type="text" id="rgLast" maxlength="60" autocomplete="family-name"></div>' +
+        '<div class="field"><label for="rgFirst">First name</label><input type="text" id="rgFirst" maxlength="60" autocomplete="given-name"></div>' +
+        '<div class="field"><label for="rgMiddle">Middle name <span class="faint">(optional)</span></label><input type="text" id="rgMiddle" maxlength="60" autocomplete="additional-name"></div>' +
+        '<div class="grid2" style="gap:12px">' +
+          '<div class="field"><label for="rgProg">Program</label><select id="rgProg">' + opt(o.programs, 'Choose…') + '</select></div>' +
+          '<div class="field"><label for="rgYear">Year level</label><select id="rgYear">' + opt(o.years, 'Choose…') + '</select></div>' +
+        '</div>' +
+        '<div class="field"><label for="rgPw">Password</label><input type="password" id="rgPw" autocomplete="new-password"><span class="hint">At least ' + o.minPassword + ' characters.</span></div>' +
+        '<div class="field"><label for="rgPw2">Repeat password</label><input type="password" id="rgPw2" autocomplete="new-password"></div>' +
+      '</div>' +
+      '<div class="field"><label>Your classes this semester <span class="faint">(tick every class you are enrolled in)</span></label>' +
+        (o.classes.length ? '<div class="rg-classes">' + o.classes.map(function (c) {
+          return '<label class="check rg-class"><input type="checkbox" value="' + esc(c.id) + '"> <span><b>' + esc(c.subject) + '</b> · ' + esc(c.section) +
+            '<span class="tiny muted"> ' + esc([c.title, c.schedule].filter(Boolean).join(' · ')) + '</span></span></label>';
+        }).join('') + '</div>' : '<p class="small muted">No classes are open yet. Ask your instructor.</p>') +
+      '</div></div>' +
+      '<div id="rgStep2" class="hidden"><div class="field"><label for="rgCode">Code from the e-mail</label>' +
+        '<input type="text" id="rgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 digits"></div></div>' +
+      '<div id="rgMsg"></div>';
+    root.querySelector('#rgNext').disabled = !o.classes.length;
+  }).catch(function (err) { body.innerHTML = alertBox('error', err.message); });
+
+  function val(id) { var el = root.querySelector('#' + id); return el ? el.value.trim() : ''; }
+  var payload = null;
+
+  root.querySelector('#rgNext').addEventListener('click', function () {
+    var btn = this, msg = root.querySelector('#rgMsg');
+    msg.innerHTML = '';
+    if (!payload || !root.querySelector('#rgStep2') || root.querySelector('#rgStep2').classList.contains('hidden')) {
+      var pw = root.querySelector('#rgPw').value;
+      if (pw !== root.querySelector('#rgPw2').value) { msg.innerHTML = alertBox('error', 'The two passwords do not match.'); return; }
+      payload = {
+        studentId: val('rgId'), email: val('rgEmail'), lastName: val('rgLast'), firstName: val('rgFirst'),
+        middleName: val('rgMiddle'), program: val('rgProg'), yearLevel: val('rgYear'), password: pw,
+        sectionIds: $$('.rg-class input:checked', root).map(function (i) { return i.value; })
+      };
+      busy(btn, true, 'Sending…');
+      call('register.start', payload).then(function (r) {
+        busy(btn, false);
+        root.querySelector('#rgStep1').classList.add('hidden');
+        root.querySelector('#rgStep2').classList.remove('hidden');
+        btn.textContent = 'Create my account';
+        msg.innerHTML = alertBox('info', 'We sent a 6-digit code to ' + r.sentTo + '. It expires in ' + r.minutes +
+          ' minutes. Not there? Check your spam or promotions folder.');
+        root.querySelector('#rgCode').focus();
+      }).catch(function (err) { busy(btn, false); payload = null; msg.innerHTML = alertBox('error', err.message); });
+      return;
+    }
+    busy(btn, true, 'Creating your account…');
+    call('register.verify', { studentId: payload.studentId, code: val('rgCode') }).then(function (r) {
+      return call('login', { role: 'student', username: payload.studentId, password: payload.password }).then(function (res) {
+        M.close();
+        saveToken(res.token);
+        S.profile = res.profile;
+        showApp();
+        toast('Welcome! Your account is ready' + (r.enrolled ? ' and you are in ' + r.enrolled + ' class' + (r.enrolled === 1 ? '' : 'es') : '') + '.');
+        afterSignIn(res);
+      });
+    }).catch(function (err) { busy(btn, false); msg.innerHTML = alertBox('error', err.message); });
+  });
 }
 
 /* ============================ FORGOT PASSWORD ============================= */
@@ -436,7 +615,7 @@ function promptPasswordChange(forced) {
             saveToken(res.token);
             close();
             toast('Your password has been changed.');
-            route();
+            if (S.needEmail) promptEmailVerify(); else route();
           })
           .catch(function (err) {
             busy(btn, false);

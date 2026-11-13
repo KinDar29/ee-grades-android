@@ -602,4 +602,12 @@ html:fullscreen, html:-webkit-full-screen { background: var(--bg); overflow: aut
 /* view-only materials */
 .modal.pdf-locked .pdf-pages canvas { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; pointer-events: none; }
 @media print { body:has(.modal.pdf-locked) * { display: none !important; } }
+
+/* ------------------------------ registration ------------------------------ */
+.reg-line { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); text-align: center; }
+.reg-line .btn { margin-top: 6px; }
+.rg-classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; max-height: 240px; overflow: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px; }
+.rg-class { align-items: flex-start; padding: 6px; border-radius: 8px; }
+.rg-class:hover { background: var(--surface-2); }
 </style>
