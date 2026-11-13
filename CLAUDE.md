@@ -101,7 +101,9 @@ change log at the bottom for every change you ship.
   (Syllabus / TOS ME / TOS FE) was copied in once by `migrateCourseFiles_`
   (Script Property `MATERIALS_MIGRATED`) and is no longer read. Files live in
   the semester's Drive folder → "Course Files", NOT shared — students get the
-  bytes through `student.material` (enrolled + released only; the app's
+  bytes through `student.material` (enrolled + released only; `downloadable`
+  is true only for Problem sets — every other type opens view-only: no
+  Download button, right-click/drag/Ctrl+S/Ctrl+P/print blocked; the app's
   `student.file` is the same call with `kind` = Material ID) and the page
   draws them with pdf.js 4.10.38 from cdnjs. `student.class` returns
   `materials` (released only) and the older `files` list for app 1.2.0.
@@ -321,4 +323,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   node-voltage items re-computed and matched). Imported by a temporary editor
   function reading a temporary Drive JSON (both removed). Question text is
   never committed here — the repo is public.
-
+- **2026-11-14** — Portal deployment version 22: students can download only
+  Problem-set materials; modules, syllabus, TOS and other materials are
+  view-only in the portal (admins can still download everything).

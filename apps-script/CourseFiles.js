@@ -327,7 +327,9 @@ function getMaterialFile_(session, sectionId, id) {
   var blob = DriveApp.getFileById(str_(row['Drive File ID'])).getBlob();
   return {
     kind: m.id, id: m.id, label: m.title, title: m.title, name: m.name,
-    mimeType: 'application/pdf',
+    mimeType: 'application/pdf', type: m.type,
+    // students may save problem sets only; everything else is view-only
+    downloadable: session.role !== 'student' || m.type === 'PROBLEM_SET',
     data: Utilities.base64Encode(blob.getBytes())
   };
 }

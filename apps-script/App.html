@@ -787,19 +787,37 @@ function renderPdfInto(box, bytes) {
 
 function openPdf(res) {
   var bytes = base64Bytes(res.data);
-  var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  var canSave = res.downloadable !== false;
+  var url = canSave ? URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })) : '';
   var m = openModal({
     title: res.label + ' · ' + res.name,
     wide: true,
     body: '<div class="pdf-pages" id="pdfPages"><div class="loading"><span class="spinner"></span> Opening…</div></div>',
     footer: '<span class="small muted" id="pdfInfo"></span><div class="spacer"></div>' +
-      '<a class="btn" href="' + url + '" download="' + esc(res.name) + '">⬇ Download</a>' +
+      (canSave ? '<a class="btn" href="' + url + '" download="' + esc(res.name) + '">⬇ Download</a>'
+        : '<span class="small muted">View only</span>') +
       '<button class="btn primary" data-close="1">Close</button>'
   });
-  m.root.querySelector('.modal').classList.add('pdf');
-  m.root.addEventListener('click', function (e) {
-    if (e.target.closest('[data-close]') || e.target === m.root) setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
-  });
+  var modal = m.root.querySelector('.modal');
+  modal.classList.add('pdf');
+  if (url) {
+    m.root.addEventListener('click', function (e) {
+      if (e.target.closest('[data-close]') || e.target === m.root) setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+    });
+  }
+  if (!canSave) {
+    // view-only: no right-click "save image", no drag-out, no Ctrl+S / Ctrl+P while it is open
+    modal.classList.add('pdf-locked');
+    ['contextmenu', 'dragstart', 'selectstart', 'copy'].forEach(function (t) {
+      m.root.addEventListener(t, function (e) { e.preventDefault(); });
+    });
+    var keys = function (e) {
+      if (!document.body.contains(m.root)) { document.removeEventListener('keydown', keys, true); return; }
+      var k = (e.key || '').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'p')) e.preventDefault();
+    };
+    document.addEventListener('keydown', keys, true);
+  }
   var box = m.root.querySelector('#pdfPages');
   renderPdfInto(box, bytes).then(function (n) {
     var info = m.root.querySelector('#pdfInfo');
@@ -807,7 +825,7 @@ function openPdf(res) {
   }).catch(function (err) {
     console.warn('pdf viewer', err);
     box.innerHTML = '<div class="alert warn"><span class="ic">!</span><div>The file can’t be shown here. ' +
-      'Use <b>Download</b> to open it on your device.</div></div>';
+      (canSave ? 'Use <b>Download</b> to open it on your device.' : 'Close it and try again, or try another browser.') + '</div></div>';
   });
 }
 
