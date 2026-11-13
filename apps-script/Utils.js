@@ -54,7 +54,11 @@ var _schemaChecked = {};
 function tab_(name) {
   var ss = master_();
   var sh = ss.getSheetByName(name);
-  if (!sh) sh = createTab_(ss, name, SCHEMA[name] || []);
+  if (!sh) {
+    // two requests may try to create a new tab at the same moment
+    try { sh = createTab_(ss, name, SCHEMA[name] || []); }
+    catch (err) { SpreadsheetApp.flush(); sh = ss.getSheetByName(name); if (!sh) throw err; }
+  }
   else if (!_schemaChecked[name] && (name === TAB.STUDENTS || name === TAB.SECTIONS)) ensureColumns_(sh, SCHEMA[name]);
   _schemaChecked[name] = true;
   return sh;

@@ -538,4 +538,32 @@ label.check input { width: auto; margin: 0; }
 .pdf-title h1 { font-size: 26px; margin: 4px 0 2px; color: var(--green-800); }
 .pdf-brand { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--gold-600); font-weight: 700; }
 .pdf-subject { font-size: 18px; margin: 10px 0 10px; padding: 8px 12px; background: var(--green-100); border-radius: 8px; color: var(--green-800); }
+
+/* ------------------------------ materials ------------------------------ */
+.mat-group { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--green-700); padding: 14px 6px 4px; border-bottom: 1px solid var(--border); }
+.mat-add { border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 10px 12px; background: var(--surface-2); }
+.mat-add summary { cursor: pointer; }
+.mat-form { margin-top: 12px; }
+.mat-edit { background: var(--green-100); border-radius: 8px; }
+.modal.materials { max-width: 960px; }
+.body.is-busy { opacity: .55; pointer-events: none; }
+
+/* --------------------------- assignments & exams --------------------------- */
+.bank-box { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-2); }
+.modal.lms { max-width: 1000px; }
+.modal.lms textarea { width: 100%; resize: vertical; }
+.exam-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; box-shadow: var(--shadow-sm); }
+.exam-timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 10px; border-radius: 8px; background: var(--green-100); color: var(--green-800); }
+.exam-timer.low { background: var(--danger-bg); color: var(--danger); }
+.exam-q { margin-bottom: 12px; }
+.exam-qn { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.exam-text { white-space: pre-wrap; font-size: 15.5px; line-height: 1.55; margin-bottom: 10px; }
+.exam-img img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff; margin-bottom: 10px; }
+.exam-choices { display: flex; flex-direction: column; gap: 6px; }
+.exam-choice { display: flex; align-items: flex-start; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.exam-choice:hover { border-color: var(--border-strong); }
+.exam-choice.on { border-color: var(--green-600); background: var(--green-100); }
+.exam-choice input { margin-top: 3px; width: auto; }
+.exam-letter { font-weight: 700; min-width: 16px; }
 </style>
