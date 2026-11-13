@@ -118,7 +118,10 @@ change log at the bottom for every change you ship.
   file is trashed. Files: semester folder → Submissions → "<subject> <section>"
   → "<title>" (folder made at creation). Admin: "📝 Problem sets" on the class
   page (the New form can take the problem-set PDF directly: it is uploaded as
-  a Problem-set Material for the same sections and linked) → submissions table, View, type scores (→ `saveScores_`), "🗑 Delete
+  a Problem-set Material for the same sections and linked) → submissions table, View, type scores (→ `saveScores_`),
+  "✎ Grade side by side" (`openGrader` in App.html: student's PDF or the
+  problem set on the left, score + class list on the right; Enter = save and
+  jump to the next ungraded file, next file prefetched), "🗑 Delete
   graded files" (dry-run count → confirm → trash files of students who have a
   score; row keeps `File Deleted At`, score stays). Tabs `Assignments`,
   `Submissions`.
@@ -293,3 +296,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   **Problem sets** everywhere people see it; the New form takes the problem
   set PDF directly (added to Materials and linked); new gradebook columns get
   type "Problem Set".
+  "✎ Grade side by side" in Submissions: read the student's PDF (or switch to
+  the problem set) and type the score in the same window; Enter saves and
+  opens the next ungraded student.
