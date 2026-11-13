@@ -566,4 +566,22 @@ label.check input { width: auto; margin: 0; }
 .exam-choice.on { border-color: var(--green-600); background: var(--green-100); }
 .exam-choice input { margin-top: 3px; width: auto; }
 .exam-letter { font-weight: 700; min-width: 16px; }
+
+/* --------------------------- side-by-side grading --------------------------- */
+.modal.grader-modal { max-width: none; width: calc(100vw - 32px); height: calc(100vh - 32px); }
+.modal.grader-modal .body { padding: 0; overflow: hidden; flex: 1; }
+.grader { display: grid; grid-template-columns: 1fr 320px; height: 100%; min-height: 0; }
+.g-left { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); background: var(--surface-2); }
+.g-tabs { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.g-tab.on { background: var(--green-700); color: #fff; border-color: var(--green-700); }
+.g-pdf { flex: 1; overflow: auto; padding: 12px; }
+.g-right { display: flex; flex-direction: column; min-height: 0; padding: 14px; overflow: hidden; }
+.g-card { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; background: var(--surface-2); }
+.g-card .g-score { width: 110px; flex: none; max-width: 110px; font-size: 22px; font-weight: 700; text-align: right; }
+.g-list { flex: 1; overflow: auto; border-top: 1px solid var(--border); }
+.g-item { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 6px; border: 0;
+  border-bottom: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.g-item:hover { background: var(--surface-2); }
+.g-item.on { background: var(--green-100); font-weight: 600; }
+@media (max-width: 800px) { .grader { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } .g-right { max-height: 45vh; border-top: 1px solid var(--border); } }
 </style>

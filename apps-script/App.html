@@ -754,6 +754,37 @@ function fileSize(n) {
 }
 
 /** Open a PDF returned by student.file / admin.file in a viewer. */
+/** Draw every page of a PDF into `box` (fits its width). Resolves with the page count. */
+function renderPdfInto(box, bytes) {
+  return loadPdfJs().then(function (lib) {
+    return lib.getDocument({ data: bytes.slice() }).promise;
+  }).then(function (pdf) {
+    box.innerHTML = '';
+    var width = Math.max(300, box.clientWidth - 2);
+    var ratio = Math.min(2, window.devicePixelRatio || 1);
+    var chain = Promise.resolve();
+    for (var n = 1; n <= pdf.numPages; n++) {
+      (function (n) {
+        chain = chain.then(function () {
+          if (!document.body.contains(box)) return null;   // viewer closed or replaced
+          return pdf.getPage(n).then(function (page) {
+            var base = page.getViewport({ scale: 1 });
+            var vp = page.getViewport({ scale: width / base.width * ratio });
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.floor(vp.width);
+            canvas.height = Math.floor(vp.height);
+            canvas.style.width = Math.floor(vp.width / ratio) + 'px';
+            canvas.setAttribute('aria-label', 'Page ' + n);
+            box.appendChild(canvas);
+            return page.render({ canvasContext: canvas.getContext('2d'), canvas: canvas, viewport: vp }).promise;
+          });
+        });
+      })(n);
+    }
+    return chain.then(function () { return pdf.numPages; });
+  });
+}
+
 function openPdf(res) {
   var bytes = base64Bytes(res.data);
   var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
@@ -770,38 +801,192 @@ function openPdf(res) {
     if (e.target.closest('[data-close]') || e.target === m.root) setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
   });
   var box = m.root.querySelector('#pdfPages');
-  loadPdfJs().then(function (lib) {
-    return lib.getDocument({ data: bytes.slice() }).promise;
-  }).then(function (pdf) {
-    box.innerHTML = '';
-    m.root.querySelector('#pdfInfo').textContent = pdf.numPages + ' page' + (pdf.numPages === 1 ? '' : 's');
-    var width = Math.max(300, box.clientWidth - 2);
-    var ratio = Math.min(2, window.devicePixelRatio || 1);
-    var chain = Promise.resolve();
-    for (var n = 1; n <= pdf.numPages; n++) {
-      (function (n) {
-        chain = chain.then(function () {
-          if (!document.body.contains(box)) return null;   // viewer closed
-          return pdf.getPage(n).then(function (page) {
-            var base = page.getViewport({ scale: 1 });
-            var vp = page.getViewport({ scale: width / base.width * ratio });
-            var canvas = document.createElement('canvas');
-            canvas.width = Math.floor(vp.width);
-            canvas.height = Math.floor(vp.height);
-            canvas.style.width = Math.floor(vp.width / ratio) + 'px';
-            canvas.setAttribute('aria-label', 'Page ' + n);
-            box.appendChild(canvas);
-            return page.render({ canvasContext: canvas.getContext('2d'), canvas: canvas, viewport: vp }).promise;
-          });
-        });
-      })(n);
-    }
-    return chain;
+  renderPdfInto(box, bytes).then(function (n) {
+    var info = m.root.querySelector('#pdfInfo');
+    if (info) info.textContent = n + ' page' + (n === 1 ? '' : 's');
   }).catch(function (err) {
     console.warn('pdf viewer', err);
     box.innerHTML = '<div class="alert warn"><span class="ic">!</span><div>The file can’t be shown here. ' +
       'Use <b>Download</b> to open it on your device.</div></div>';
   });
+}
+
+/**
+ * Side-by-side grading: the student's PDF (or the problem set) on the left,
+ * the class list and the score box on the right. Save & next moves on and the
+ * next file is fetched ahead of time. `onClose(latest)` gets the fresh data.
+ */
+function openGrader(section, subs, startStudentId, onClose) {
+  var a = subs.assignment, max = subs.max;
+  var students = subs.students;
+  var files = {};            // studentId → Promise<bytes>
+  var setPdf = null;         // Promise<bytes> of the problem set
+  var view = 'answer', idx = 0, onlyTodo = false, latest = subs;
+
+  var m = openModal({
+    title: 'Grade · ' + a.title,
+    wide: true,
+    body: '<div class="grader">' +
+      '<div class="g-left"><div class="g-tabs">' +
+        '<button class="btn sm g-tab on" data-view="answer">Student’s answer</button>' +
+        (a.materialId ? '<button class="btn sm g-tab" data-view="set">Problem set</button>' : '') +
+        '<span class="spacer"></span><span class="small muted" id="gInfo"></span></div>' +
+        '<div class="pdf-pages g-pdf" id="gPdf"></div></div>' +
+      '<div class="g-right"><div class="g-card" id="gCard"></div>' +
+        '<label class="check small" style="margin:10px 0 6px"><input type="checkbox" id="gTodo"> Only show students still to grade</label>' +
+        '<div class="g-list" id="gList"></div></div>' +
+      '</div>',
+    footer: '<span class="small muted">Enter = save & next · ↑ ↓ = previous / next student</span><div class="spacer"></div>' +
+      '<button class="btn primary" id="gDone">Done</button>'
+  });
+  var root = m.root;
+  root.querySelector('.modal').classList.add('grader-modal');
+
+  function hasFile(st) { return st.submission && !st.submission.fileDeleted; }
+  function todo(st) { return hasFile(st) && (st.score === null || st.score === undefined); }
+  function shown() { return students.filter(function (st) { return !onlyTodo || todo(st); }); }
+
+  function fetchFile(st) {
+    if (!hasFile(st)) return null;
+    if (!files[st.studentId]) {
+      files[st.studentId] = call('admin.submission', { sectionId: section.id, assignmentId: a.id, studentId: st.studentId })
+        .then(function (r) { return base64Bytes(r.data); });
+      files[st.studentId].catch(function () { delete files[st.studentId]; });
+    }
+    return files[st.studentId];
+  }
+
+  function drawList() {
+    var list = shown();
+    $('#gList', root).innerHTML = list.map(function (st) {
+      var i = students.indexOf(st);
+      var chip = st.score !== null && st.score !== undefined ? '<span class="badge green">' + st.score + '</span>'
+        : (hasFile(st) ? '<span class="badge gold">to grade</span>' : (st.submission ? '<span class="badge grey">file deleted</span>' : '<span class="badge grey">none</span>'));
+      return '<button class="g-item' + (i === idx ? ' on' : '') + '" data-i="' + i + '"><span>' + esc(st.name) +
+        (st.submission && st.submission.late ? ' <span class="badge gold">late</span>' : '') + '</span>' + chip + '</button>';
+    }).join('') || '<p class="small muted">Everyone with a file is graded.</p>';
+    $$('.g-item', root).forEach(function (b) { b.addEventListener('click', function () { go(Number(this.dataset.i)); }); });
+    var on = $('.g-item.on', root);
+    if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+
+  function drawCard() {
+    var st = students[idx];
+    var sub = st.submission;
+    $('#gCard', root).innerHTML =
+      '<div class="small muted">' + (idx + 1) + ' of ' + students.length + '</div>' +
+      '<h3 style="margin:2px 0">' + esc(st.name) + '</h3><div class="tiny muted">' + esc(st.studentId) + '</div>' +
+      '<div class="small" style="margin:8px 0">' + (sub ? 'Submitted ' + esc(sub.submittedAt) + (sub.late ? ' <span class="badge gold">late</span>' : '') +
+        (sub.fileDeleted ? '<br><span class="muted">File deleted after grading</span>' : '') : '<span class="muted">No submission</span>') + '</div>' +
+      '<label class="small" for="gScore"><b>Score</b>' + (max ? ' (out of ' + max + ')' : '') + '</label>' +
+      '<div class="row" style="gap:8px;margin-top:4px"><input type="number" id="gScore" min="0" step="any" value="' + (st.score === null || st.score === undefined ? '' : st.score) + '" class="g-score">' +
+      (max ? '<span class="muted">/ ' + max + '</span>' : '') + '</div>' +
+      '<button class="btn primary" id="gSave" style="width:100%;margin-top:10px">Save & next →</button>' +
+      '<div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" id="gPrev">← Previous</button><div class="spacer"></div><button class="btn sm" id="gNext">Next →</button></div>';
+    var inp = $('#gScore', root);
+    setTimeout(function () { inp.focus(); inp.select(); }, 30);
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); save(); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); step(1); }
+      if (e.key === 'ArrowUp') { e.preventDefault(); step(-1); }
+    });
+    $('#gSave', root).addEventListener('click', save);
+    $('#gPrev', root).addEventListener('click', function () { step(-1); });
+    $('#gNext', root).addEventListener('click', function () { step(1); });
+  }
+
+  function drawPdf() {
+    var box = $('#gPdf', root), info = $('#gInfo', root);
+    var fresh = document.createElement('div');
+    fresh.className = box.className;
+    fresh.id = 'gPdf';
+    box.replaceWith(fresh);
+    box = fresh;
+    var st = students[idx];
+    var p;
+    if (view === 'set') {
+      setPdf = setPdf || call('admin.material', { sectionId: section.id, id: a.materialId }).then(function (r) { return base64Bytes(r.data); });
+      p = setPdf;
+      info.textContent = 'Problem set';
+    } else {
+      p = fetchFile(st);
+      info.textContent = hasFile(st) ? st.submission.fileName : '';
+    }
+    if (!p) {
+      box.innerHTML = '<div class="empty"><h4>' + (st.submission ? 'The file was deleted after grading.' : 'No file submitted.') + '</h4></div>';
+      return;
+    }
+    box.innerHTML = '<div class="loading"><span class="spinner"></span> Opening…</div>';
+    p.then(function (bytes) {
+      if (!document.body.contains(box)) return null;
+      return renderPdfInto(box, bytes).then(function (n) {
+        if (document.body.contains(box)) info.textContent += ' · ' + n + ' page' + (n === 1 ? '' : 's');
+      });
+    }).catch(function (err) {
+      if (document.body.contains(box)) box.innerHTML = '<div class="alert warn"><span class="ic">!</span><div>' + esc(err.message || 'The file can’t be shown.') + '</div></div>';
+    });
+    // fetch the next student's file ahead of time
+    for (var k = idx + 1; k < students.length; k++) { if (hasFile(students[k])) { fetchFile(students[k]); break; } }
+  }
+
+  function go(i) {
+    if (i < 0 || i >= students.length) return;
+    idx = i;
+    drawCard(); drawList(); drawPdf();
+  }
+
+  function step(d) {
+    var list = shown(), pos = list.indexOf(students[idx]);
+    var target = pos < 0 ? list[0] : list[pos + d];
+    if (target) go(students.indexOf(target));
+  }
+
+  function nextToGrade() {
+    for (var k = 1; k <= students.length; k++) {
+      var i = (idx + k) % students.length;
+      if (todo(students[i])) return i;
+    }
+    return -1;
+  }
+
+  function save() {
+    var st = students[idx];
+    var inp = $('#gScore', root);
+    var v = inp.value.trim();
+    var was = st.score === null || st.score === undefined ? '' : String(st.score);
+    if (v === was) { var n0 = nextToGrade(); if (n0 > -1 && n0 !== idx) go(n0); else step(1); return; }
+    if (v !== '' && (isNaN(Number(v)) || Number(v) < 0)) { toast('Type a number (or leave it blank).', 'error'); return; }
+    var btn = $('#gSave', root);
+    busy(btn, true, 'Saving…');
+    call('admin.submissions.grade', { sectionId: section.id, assignmentId: a.id, changes: [{ studentId: st.studentId, value: v }] })
+      .then(function (r) {
+        latest = r;
+        var fresh = {};
+        r.students.forEach(function (x) { fresh[x.studentId] = x; });
+        students.forEach(function (x, i) { if (fresh[x.studentId]) students[i] = fresh[x.studentId]; });
+        if (r.problems && r.problems.length) toast(r.problems.join('; '), 'error');
+        var n = nextToGrade();
+        if (n > -1 && n !== idx) go(n); else { drawCard(); drawList(); toast('Saved. Everyone with a file is graded.', 'success'); }
+      })
+      .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+  }
+
+  $$('.g-tab', root).forEach(function (b) {
+    b.addEventListener('click', function () {
+      view = this.dataset.view;
+      $$('.g-tab', root).forEach(function (x) { x.classList.toggle('on', x.dataset.view === view); });
+      drawPdf();
+    });
+  });
+  $('#gTodo', root).addEventListener('change', function () { onlyTodo = this.checked; drawList(); });
+  function finish() { m.close(); if (onClose) onClose(latest); }
+  $('#gDone', root).addEventListener('click', finish);
+  root.addEventListener('click', function (e) { if (e.target.closest('[data-close]')) { if (onClose) onClose(latest); } });
+
+  var start = 0;
+  students.forEach(function (st, i) { if (st.studentId === startStudentId) start = i; });
+  if (!startStudentId) { var first = students.map(todo).indexOf(true); start = first > -1 ? first : 0; }
+  go(start);
 }
 
 /** Materials in display order, grouped by week/unit (first appearance order). */
@@ -1051,7 +1236,7 @@ function callRetry(action, payload, tries) {
 
 function assignmentsCard(sectionId, list) {
   if (!list || !list.length) return '';
-  return '<div class="card"><div class="card-head"><h3>Assignments</h3></div><div class="card-body tight"><div class="file-list">' +
+  return '<div class="card"><div class="card-head"><h3>Problem sets</h3></div><div class="card-body tight"><div class="file-list">' +
     list.map(function (a) {
       var sub = a.submission;
       var st;
@@ -1066,11 +1251,11 @@ function assignmentsCard(sectionId, list) {
         (sub ? '<div class="tiny muted" style="margin-top:4px">Your file: ' + esc(sub.fileName) + ' · ' + fileSize(sub.size) +
           ' · received ' + esc(sub.submittedAt) + (sub.fileDeleted ? ' · removed after grading' : '') + '</div>' : '') +
         '</div><div class="file-acts">' +
-        (a.materialId ? '<button class="btn sm" data-view-file="' + esc(a.materialId) + '" data-section="' + esc(sectionId) + '">Problem set</button>' : '') +
+        (a.materialId ? '<button class="btn sm" data-view-file="' + esc(a.materialId) + '" data-section="' + esc(sectionId) + '">View problem set</button>' : '') +
         (sub && !sub.fileDeleted ? '<button class="btn sm" data-my-sub="' + esc(a.id) + '">My file</button>' : '') +
-        (a.canSubmit ? '<button class="btn sm primary" data-upload="' + esc(a.id) + '">' + (sub ? 'Replace PDF' : '⬆ Upload PDF') + '</button>' : '') +
+        (a.canSubmit ? '<button class="btn sm primary" data-upload="' + esc(a.id) + '">' + (sub ? 'Replace my answer' : '⬆ Upload my answer (PDF)') + '</button>' : '') +
         '</div></div>';
-    }).join('') + '</div><p class="tiny faint" style="margin:8px 6px 0">One PDF per assignment, up to 10 MB. Scan your work to PDF first. You can replace it until the due time.</p></div></div>';
+    }).join('') + '</div><p class="tiny faint" style="margin:8px 6px 0">Upload your answers as one PDF per problem set, up to 10 MB. Scan your work to PDF first. You can replace it until the due time.</p></div></div>';
 }
 
 function examsCard(sectionId, list) {
@@ -1350,7 +1535,7 @@ function checkedSiblings(body) {
 /* ------------------------------ assignments ------------------------------- */
 
 function manageAssignments(section) {
-  var M = lmsModal('Assignments · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
+  var M = lmsModal('Problem sets · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
   var data = null;
 
   function run(action, params, msg) {
@@ -1364,17 +1549,20 @@ function manageAssignments(section) {
 
   function list(d) {
     if (d) data = d;
-    var html = '<details class="mat-add"' + (data.assignments.length ? '' : ' open') + '><summary><b>＋ New assignment</b> ' +
-      '<span class="small muted">students upload one PDF each</span></summary><div class="mat-form">' +
+    var html = '<details class="mat-add"' + (data.assignments.length ? '' : ' open') + '><summary><b>＋ New problem set</b> ' +
+      '<span class="small muted">students download it and upload their answers as one PDF</span></summary><div class="mat-form">' +
       '<div class="grid2"><div class="field"><label>Title</label><input type="text" id="aTitle" maxlength="120" placeholder="e.g. Problem Set 5"></div>' +
       '<div class="field"><label>Due</label><input type="datetime-local" id="aDue"></div></div>' +
       '<div class="field"><label>Instructions <span class="faint">(optional)</span></label><textarea id="aInstr" rows="2" maxlength="2000" placeholder="e.g. Answer items 1–10. Show your solutions."></textarea></div>' +
-      '<div class="field"><label>Problem set to download <span class="faint">(optional — from this class’s Materials)</span></label><select id="aMat"><option value="">None</option>' +
-      data.materials.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.title) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>Problem set PDF students download</label>' +
+      '<input type="file" id="aFile" accept="application/pdf,.pdf">' +
+      '<div class="small muted" style="margin:6px 0 4px">or one already in Materials:</div><select id="aMat"><option value="">None</option>' +
+      data.materials.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.title) + '</option>'; }).join('') + '</select>' +
+      '<span class="hint">An uploaded PDF is also added to Materials (type Problem set), for every section you give this to.</span></div>' +
       '<label class="check"><input type="checkbox" id="aLate"> Accept late submissions (marked late)</label>' +
       columnPicker(data.columns, 'a') + siblingChecks(data.siblings) +
-      '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="aCreate">Create assignment</button></div></div></details>';
-    if (!data.assignments.length) html += '<p class="small muted" style="margin:14px 2px 0">No assignments yet.</p>';
+      '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="aCreate">Create problem set</button></div></div></details>';
+    if (!data.assignments.length) html += '<p class="small muted" style="margin:14px 2px 0">No problem sets yet.</p>';
     html += '<div class="file-list">' + data.assignments.map(function (a) {
       var c = a.counts;
       return '<div class="file-row"><div class="file-txt"><b>' + esc(a.title) + '</b> ' +
@@ -1395,17 +1583,31 @@ function manageAssignments(section) {
         instructions: $('#aInstr', M.body).value, materialId: $('#aMat', M.body).value,
         allowLate: $('#aLate', M.body).checked, open: true, column: readColumn(M.body, 'a'), alsoSectionIds: checkedSiblings(M.body)
       };
-      if (!p.title) { toast('Give the assignment a title.', 'error'); return; }
+      if (!p.title) { toast('Give the problem set a title.', 'error'); return; }
       if (!p.dueAt) { toast('Set the due date and time.', 'error'); return; }
-      busy(btn, true, 'Creating…');
-      run('admin.assignment.create', p, 'Assignment created.').then(list).catch(function () { busy(btn, false); });
+      var f = $('#aFile', M.body).files && $('#aFile', M.body).files[0];
+      busy(btn, true, f ? 'Uploading the PDF…' : 'Creating…');
+      var step = f ? readPdfFile(f, 20 * 1024 * 1024).catch(function (e) { toast(e.message, 'error'); throw e; }).then(function (b64) {
+        return run('admin.materials.upload', {
+          type: 'PROBLEM_SET', title: p.title, group: '', visible: true, visibleFrom: '',
+          name: f.name, mimeType: 'application/pdf', data: b64, alsoSectionIds: p.alsoSectionIds
+        });
+      }).then(function (mres) {
+        // the newest Problem-set material with this title is the one just uploaded
+        var mine = mres.materials.filter(function (m) { return m.type === 'PROBLEM_SET' && m.title === p.title; });
+        if (mine.length) p.materialId = mine[mine.length - 1].id;
+      }) : Promise.resolve();
+      step.then(function () {
+        busy(btn, true, 'Creating…');
+        return run('admin.assignment.create', p, 'Problem set created.');
+      }).then(list).catch(function () { busy(btn, false); /* the error was already shown */ });
     });
     $$('[data-open]', M.body).forEach(function (b) { b.addEventListener('click', function () { openSubs(this.dataset.open); }); });
     $$('[data-aedit]', M.body).forEach(function (b) { b.addEventListener('click', function () { editForm(this.dataset.aedit); }); });
     $$('[data-arm]', M.body).forEach(function (b) {
       b.addEventListener('click', function () {
         var a = data.assignments.filter(function (x) { return x.id === b.dataset.arm; })[0];
-        confirmDialog('Remove “' + a.title + '”?', 'Its ' + a.counts.submitted + ' submitted file(s) are deleted. The gradebook column and any scores stay.', 'Remove', true)
+        confirmDialog('Remove “' + a.title + '”?', 'Its ' + a.counts.submitted + ' submitted answer file(s) are deleted. The gradebook column and any scores stay.', 'Remove', true)
           .then(function (ok) { if (ok) run('admin.assignment.remove', { id: a.id }, 'Removed.').then(list); });
       });
     });
@@ -1413,7 +1615,7 @@ function manageAssignments(section) {
 
   function editForm(id) {
     var a = data.assignments.filter(function (x) { return x.id === id; })[0];
-    M.body.innerHTML = '<button class="btn sm ghost" id="aBack">← All assignments</button><h3 style="margin:12px 0">Edit · ' + esc(a.title) + '</h3>' +
+    M.body.innerHTML = '<button class="btn sm ghost" id="aBack">← All problem sets</button><h3 style="margin:12px 0">Edit · ' + esc(a.title) + '</h3>' +
       '<div class="grid2"><div class="field"><label>Title</label><input type="text" id="eTitle" maxlength="120" value="' + esc(a.title) + '"></div>' +
       '<div class="field"><label>Due</label><input type="datetime-local" id="eDue" value="' + esc(toLocalInput(a.dueAt)) + '"></div></div>' +
       '<div class="field"><label>Instructions</label><textarea id="eInstr" rows="3" maxlength="2000">' + esc(a.instructions) + '</textarea></div>' +
@@ -1443,24 +1645,29 @@ function manageAssignments(section) {
   function drawSubs(s) {
     var a = s.assignment;
     var withFile = s.students.filter(function (x) { return x.submission && !x.submission.fileDeleted; }).length;
-    var html = '<button class="btn sm ghost" id="aBack">← All assignments</button>' +
+    var html = '<button class="btn sm ghost" id="aBack">← All problem sets</button>' +
       '<div class="row wrap" style="margin:12px 0"><div><h3 style="margin:0">' + esc(a.title) + '</h3>' +
       '<div class="small muted">Due ' + esc(fmtWhen(a.dueAt)) + ' · scores go to “' + esc(s.columnName || '—') + '” (max ' + (s.max || '—') + ')</div></div>' +
-      '<div class="spacer"></div><button class="btn sm" id="sDel">🗑 Delete graded files</button>' +
-      '<button class="btn sm primary" id="sSave">Save scores</button></div>' +
+      '<div class="spacer"></div><button class="btn sm primary" id="sGrade">✎ Grade side by side</button>' +
+      '<button class="btn sm" id="sDel">🗑 Delete graded files</button>' +
+      '<button class="btn sm" id="sSave">Save scores</button></div>' +
       '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Submitted</th><th>File</th><th class="num" style="width:120px">Score</th></tr></thead><tbody>' +
       s.students.map(function (st) {
         var sub = st.submission;
         return '<tr><td>' + esc(st.name) + '<div class="tiny muted">' + esc(st.studentId) + '</div></td>' +
           '<td class="small">' + (sub ? esc(sub.submittedAt) + (sub.late ? ' <span class="badge gold">late</span>' : '') : '<span class="muted">—</span>') + '</td>' +
           '<td>' + (sub ? (sub.fileDeleted ? '<span class="tiny muted">deleted after grading</span>'
-            : '<button class="btn sm" data-sview="' + esc(st.studentId) + '">View</button> <span class="tiny muted">' + fileSize(sub.size) + '</span>') : '') + '</td>' +
+            : '<button class="btn sm" data-sgrade="' + esc(st.studentId) + '">Grade</button> <button class="btn sm ghost" data-sview="' + esc(st.studentId) + '">View</button> <span class="tiny muted">' + fileSize(sub.size) + '</span>') : '') + '</td>' +
           '<td class="num"><input type="number" min="0" step="any" data-score="' + esc(st.studentId) + '" value="' + (st.score === null ? '' : st.score) +
           '" data-was="' + (st.score === null ? '' : st.score) + '" style="width:90px;text-align:right"></td></tr>';
       }).join('') + '</tbody></table></div>' +
       '<p class="tiny faint">' + withFile + ' file(s) stored. “Delete graded files” removes only the files of students who already have a score; the record and the score stay.</p>';
     M.body.innerHTML = html;
     $('#aBack', M.body).addEventListener('click', function () { call('admin.assignments', { sectionId: section.id }).then(list); });
+    $('#sGrade', M.body).addEventListener('click', function () { openGrader(section, s, '', drawSubs); });
+    $$('[data-sgrade]', M.body).forEach(function (b) {
+      b.addEventListener('click', function () { openGrader(section, s, this.dataset.sgrade, drawSubs); });
+    });
     $$('[data-sview]', M.body).forEach(function (b) {
       b.addEventListener('click', function () {
         var btn = this;
@@ -2632,7 +2839,7 @@ function drawGradebook() {
     '<button class="btn sm" id="gbAddStudents">+ Students</button>' +
     '<button class="btn sm primary" id="gbAddAsm">+ Requirement</button>' +
     '<button class="btn sm" id="gbFiles">📄 Materials</button>' +
-    '<button class="btn sm" id="gbAsg">📝 Assignments</button>' +
+    '<button class="btn sm" id="gbAsg">📝 Problem sets</button>' +
     '<button class="btn sm" id="gbExams">🧪 Exams</button>' +
     '<button class="btn sm gold" id="gbExport">⬇ Class record (PDF)</button>' +
     '<button class="btn sm" id="gbMore">⋯</button>' +

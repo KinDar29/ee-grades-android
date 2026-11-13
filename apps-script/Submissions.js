@@ -92,7 +92,7 @@ function assignmentsOf_(sectionId) {
 
 function assignmentById_(sectionId, id) {
   var list = assignmentsOf_(sectionId).filter(function (a) { return a.id === str_(id); });
-  if (!list.length) throw new Error('That assignment no longer exists.');
+  if (!list.length) throw new Error('That problem set no longer exists.');
   return list[0];
 }
 
@@ -214,7 +214,7 @@ function adminAssignments_(session, sectionId) {
 function createAssignment_(session, p) {
   var sec = getSectionRecord_(p.sectionId);
   var title = str_(p.title).slice(0, 120);
-  if (!title) throw new Error('Please give the assignment a title.');
+  if (!title) throw new Error('Please give the problem set a title.');
   var due = dateTimeText_(p.dueAt);
   if (!due) throw new Error('Please set the due date and time.');
   var col = p.column || { mode: 'new' };
@@ -243,7 +243,7 @@ function createAssignment_(session, p) {
       var s = secs[sid] || sec;
       var assessmentId = columnFor_(session, sid, {
         mode: col.mode, assessmentId: sid === sec.id ? col.assessmentId : '', name: colName,
-        type: 'Assignment', max: num_(col.max) || 100, weight: num_(col.weight) || 0
+        type: 'Problem Set', max: num_(col.max) || 100, weight: num_(col.weight) || 0
       });
       var materialId = '';
       if (mat) {
@@ -271,7 +271,7 @@ function updateAssignment_(session, p) {
   return withLock_(function () {
     var sh = tab_(SUBMIT.ASSIGN_TAB);
     var row = findRow_(sh, 'Assignment ID', p.id);
-    if (!row || str_(row['Section ID']) !== str_(p.sectionId)) throw new Error('That assignment no longer exists.');
+    if (!row || str_(row['Section ID']) !== str_(p.sectionId)) throw new Error('That problem set no longer exists.');
     var patch = {};
     if (p.title !== undefined && str_(p.title)) patch['Title'] = str_(p.title).slice(0, 120);
     if (p.instructions !== undefined) patch['Instructions'] = str_(p.instructions).slice(0, 2000);
@@ -337,7 +337,7 @@ function adminSubmissions_(session, sectionId, assignmentId) {
 /** p: { sectionId, assignmentId, changes: [{ studentId, value }] } */
 function gradeSubmissions_(session, p) {
   var a = assignmentById_(p.sectionId, p.assignmentId);
-  if (!a.assessmentId) throw new Error('This assignment has no gradebook column.');
+  if (!a.assessmentId) throw new Error('This problem set has no gradebook column.');
   var res = saveScores_(session, p.sectionId, (p.changes || []).map(function (c) {
     return { studentId: c.studentId, assessmentId: a.assessmentId, value: c.value };
   }));
@@ -355,7 +355,7 @@ function deleteGradedFiles_(session, sectionId, assignmentId, dryRun) {
   var a = assignmentById_(sectionId, assignmentId);
   var data = readSectionData_(sectionId, true);
   var col = findAssessmentFor_(data, a.assessmentId, '');
-  if (!col) throw new Error('This assignment has no gradebook column, so nothing counts as graded.');
+  if (!col) throw new Error('This problem set has no gradebook column, so nothing counts as graded.');
   var latest = latestSubmissions_(a.id);
   var pick = [];
   data.roster.forEach(function (s) {
@@ -436,11 +436,11 @@ function submitAssignment_(session, p) {
   var sid = str_(p.sectionId);
   if (!studentEnrolled_(sid, session.id)) throw new Error('You are not enrolled in this class.');
   var a = assignmentById_(sid, p.assignmentId);
-  if (!a.open) throw new Error('This assignment is closed.');
+  if (!a.open) throw new Error('This problem set is closed.');
   var now = new Date().getTime();
   var dueMs = dateTimeMs_(a.dueAt);
   var late = dueMs !== null && now > dueMs;
-  if (late && !a.allowLate) throw new Error('The due time has passed. Late submissions are not accepted for this assignment.');
+  if (late && !a.allowLate) throw new Error('The due time has passed. Late submissions are not accepted for this problem set.');
 
   var name = str_(p.name).replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'answer.pdf';
   if (!/\.pdf$/i.test(name)) throw new Error('Please upload a PDF. Scan your work to PDF first.');
