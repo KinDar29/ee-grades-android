@@ -1051,7 +1051,7 @@ function callRetry(action, payload, tries) {
 
 function assignmentsCard(sectionId, list) {
   if (!list || !list.length) return '';
-  return '<div class="card"><div class="card-head"><h3>Assignments</h3></div><div class="card-body tight"><div class="file-list">' +
+  return '<div class="card"><div class="card-head"><h3>Problem sets</h3></div><div class="card-body tight"><div class="file-list">' +
     list.map(function (a) {
       var sub = a.submission;
       var st;
@@ -1066,11 +1066,11 @@ function assignmentsCard(sectionId, list) {
         (sub ? '<div class="tiny muted" style="margin-top:4px">Your file: ' + esc(sub.fileName) + ' · ' + fileSize(sub.size) +
           ' · received ' + esc(sub.submittedAt) + (sub.fileDeleted ? ' · removed after grading' : '') + '</div>' : '') +
         '</div><div class="file-acts">' +
-        (a.materialId ? '<button class="btn sm" data-view-file="' + esc(a.materialId) + '" data-section="' + esc(sectionId) + '">Problem set</button>' : '') +
+        (a.materialId ? '<button class="btn sm" data-view-file="' + esc(a.materialId) + '" data-section="' + esc(sectionId) + '">View problem set</button>' : '') +
         (sub && !sub.fileDeleted ? '<button class="btn sm" data-my-sub="' + esc(a.id) + '">My file</button>' : '') +
-        (a.canSubmit ? '<button class="btn sm primary" data-upload="' + esc(a.id) + '">' + (sub ? 'Replace PDF' : '⬆ Upload PDF') + '</button>' : '') +
+        (a.canSubmit ? '<button class="btn sm primary" data-upload="' + esc(a.id) + '">' + (sub ? 'Replace my answer' : '⬆ Upload my answer (PDF)') + '</button>' : '') +
         '</div></div>';
-    }).join('') + '</div><p class="tiny faint" style="margin:8px 6px 0">One PDF per assignment, up to 10 MB. Scan your work to PDF first. You can replace it until the due time.</p></div></div>';
+    }).join('') + '</div><p class="tiny faint" style="margin:8px 6px 0">Upload your answers as one PDF per problem set, up to 10 MB. Scan your work to PDF first. You can replace it until the due time.</p></div></div>';
 }
 
 function examsCard(sectionId, list) {
@@ -1350,7 +1350,7 @@ function checkedSiblings(body) {
 /* ------------------------------ assignments ------------------------------- */
 
 function manageAssignments(section) {
-  var M = lmsModal('Assignments · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
+  var M = lmsModal('Problem sets · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
   var data = null;
 
   function run(action, params, msg) {
@@ -1364,17 +1364,20 @@ function manageAssignments(section) {
 
   function list(d) {
     if (d) data = d;
-    var html = '<details class="mat-add"' + (data.assignments.length ? '' : ' open') + '><summary><b>＋ New assignment</b> ' +
-      '<span class="small muted">students upload one PDF each</span></summary><div class="mat-form">' +
+    var html = '<details class="mat-add"' + (data.assignments.length ? '' : ' open') + '><summary><b>＋ New problem set</b> ' +
+      '<span class="small muted">students download it and upload their answers as one PDF</span></summary><div class="mat-form">' +
       '<div class="grid2"><div class="field"><label>Title</label><input type="text" id="aTitle" maxlength="120" placeholder="e.g. Problem Set 5"></div>' +
       '<div class="field"><label>Due</label><input type="datetime-local" id="aDue"></div></div>' +
       '<div class="field"><label>Instructions <span class="faint">(optional)</span></label><textarea id="aInstr" rows="2" maxlength="2000" placeholder="e.g. Answer items 1–10. Show your solutions."></textarea></div>' +
-      '<div class="field"><label>Problem set to download <span class="faint">(optional — from this class’s Materials)</span></label><select id="aMat"><option value="">None</option>' +
-      data.materials.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.title) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="field"><label>Problem set PDF students download</label>' +
+      '<input type="file" id="aFile" accept="application/pdf,.pdf">' +
+      '<div class="small muted" style="margin:6px 0 4px">or one already in Materials:</div><select id="aMat"><option value="">None</option>' +
+      data.materials.map(function (m) { return '<option value="' + esc(m.id) + '">' + esc(m.title) + '</option>'; }).join('') + '</select>' +
+      '<span class="hint">An uploaded PDF is also added to Materials (type Problem set), for every section you give this to.</span></div>' +
       '<label class="check"><input type="checkbox" id="aLate"> Accept late submissions (marked late)</label>' +
       columnPicker(data.columns, 'a') + siblingChecks(data.siblings) +
-      '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="aCreate">Create assignment</button></div></div></details>';
-    if (!data.assignments.length) html += '<p class="small muted" style="margin:14px 2px 0">No assignments yet.</p>';
+      '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="aCreate">Create problem set</button></div></div></details>';
+    if (!data.assignments.length) html += '<p class="small muted" style="margin:14px 2px 0">No problem sets yet.</p>';
     html += '<div class="file-list">' + data.assignments.map(function (a) {
       var c = a.counts;
       return '<div class="file-row"><div class="file-txt"><b>' + esc(a.title) + '</b> ' +
@@ -1395,17 +1398,31 @@ function manageAssignments(section) {
         instructions: $('#aInstr', M.body).value, materialId: $('#aMat', M.body).value,
         allowLate: $('#aLate', M.body).checked, open: true, column: readColumn(M.body, 'a'), alsoSectionIds: checkedSiblings(M.body)
       };
-      if (!p.title) { toast('Give the assignment a title.', 'error'); return; }
+      if (!p.title) { toast('Give the problem set a title.', 'error'); return; }
       if (!p.dueAt) { toast('Set the due date and time.', 'error'); return; }
-      busy(btn, true, 'Creating…');
-      run('admin.assignment.create', p, 'Assignment created.').then(list).catch(function () { busy(btn, false); });
+      var f = $('#aFile', M.body).files && $('#aFile', M.body).files[0];
+      busy(btn, true, f ? 'Uploading the PDF…' : 'Creating…');
+      var step = f ? readPdfFile(f, 20 * 1024 * 1024).catch(function (e) { toast(e.message, 'error'); throw e; }).then(function (b64) {
+        return run('admin.materials.upload', {
+          type: 'PROBLEM_SET', title: p.title, group: '', visible: true, visibleFrom: '',
+          name: f.name, mimeType: 'application/pdf', data: b64, alsoSectionIds: p.alsoSectionIds
+        });
+      }).then(function (mres) {
+        // the newest Problem-set material with this title is the one just uploaded
+        var mine = mres.materials.filter(function (m) { return m.type === 'PROBLEM_SET' && m.title === p.title; });
+        if (mine.length) p.materialId = mine[mine.length - 1].id;
+      }) : Promise.resolve();
+      step.then(function () {
+        busy(btn, true, 'Creating…');
+        return run('admin.assignment.create', p, 'Problem set created.');
+      }).then(list).catch(function () { busy(btn, false); /* the error was already shown */ });
     });
     $$('[data-open]', M.body).forEach(function (b) { b.addEventListener('click', function () { openSubs(this.dataset.open); }); });
     $$('[data-aedit]', M.body).forEach(function (b) { b.addEventListener('click', function () { editForm(this.dataset.aedit); }); });
     $$('[data-arm]', M.body).forEach(function (b) {
       b.addEventListener('click', function () {
         var a = data.assignments.filter(function (x) { return x.id === b.dataset.arm; })[0];
-        confirmDialog('Remove “' + a.title + '”?', 'Its ' + a.counts.submitted + ' submitted file(s) are deleted. The gradebook column and any scores stay.', 'Remove', true)
+        confirmDialog('Remove “' + a.title + '”?', 'Its ' + a.counts.submitted + ' submitted answer file(s) are deleted. The gradebook column and any scores stay.', 'Remove', true)
           .then(function (ok) { if (ok) run('admin.assignment.remove', { id: a.id }, 'Removed.').then(list); });
       });
     });
@@ -1413,7 +1430,7 @@ function manageAssignments(section) {
 
   function editForm(id) {
     var a = data.assignments.filter(function (x) { return x.id === id; })[0];
-    M.body.innerHTML = '<button class="btn sm ghost" id="aBack">← All assignments</button><h3 style="margin:12px 0">Edit · ' + esc(a.title) + '</h3>' +
+    M.body.innerHTML = '<button class="btn sm ghost" id="aBack">← All problem sets</button><h3 style="margin:12px 0">Edit · ' + esc(a.title) + '</h3>' +
       '<div class="grid2"><div class="field"><label>Title</label><input type="text" id="eTitle" maxlength="120" value="' + esc(a.title) + '"></div>' +
       '<div class="field"><label>Due</label><input type="datetime-local" id="eDue" value="' + esc(toLocalInput(a.dueAt)) + '"></div></div>' +
       '<div class="field"><label>Instructions</label><textarea id="eInstr" rows="3" maxlength="2000">' + esc(a.instructions) + '</textarea></div>' +
@@ -1443,7 +1460,7 @@ function manageAssignments(section) {
   function drawSubs(s) {
     var a = s.assignment;
     var withFile = s.students.filter(function (x) { return x.submission && !x.submission.fileDeleted; }).length;
-    var html = '<button class="btn sm ghost" id="aBack">← All assignments</button>' +
+    var html = '<button class="btn sm ghost" id="aBack">← All problem sets</button>' +
       '<div class="row wrap" style="margin:12px 0"><div><h3 style="margin:0">' + esc(a.title) + '</h3>' +
       '<div class="small muted">Due ' + esc(fmtWhen(a.dueAt)) + ' · scores go to “' + esc(s.columnName || '—') + '” (max ' + (s.max || '—') + ')</div></div>' +
       '<div class="spacer"></div><button class="btn sm" id="sDel">🗑 Delete graded files</button>' +
@@ -2632,7 +2649,7 @@ function drawGradebook() {
     '<button class="btn sm" id="gbAddStudents">+ Students</button>' +
     '<button class="btn sm primary" id="gbAddAsm">+ Requirement</button>' +
     '<button class="btn sm" id="gbFiles">📄 Materials</button>' +
-    '<button class="btn sm" id="gbAsg">📝 Assignments</button>' +
+    '<button class="btn sm" id="gbAsg">📝 Problem sets</button>' +
     '<button class="btn sm" id="gbExams">🧪 Exams</button>' +
     '<button class="btn sm gold" id="gbExport">⬇ Class record (PDF)</button>' +
     '<button class="btn sm" id="gbMore">⋯</button>' +

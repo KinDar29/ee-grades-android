@@ -105,7 +105,9 @@ change log at the bottom for every change you ship.
   `student.file` is the same call with `kind` = Material ID) and the page
   draws them with pdf.js 4.10.38 from cdnjs. `student.class` returns
   `materials` (released only) and the older `files` list for app 1.2.0.
-- `Submissions.js` — **Assignments**: per class (optionally all sibling
+- `Submissions.js` — **Problem sets** (called "assignments" in the code and
+  tabs; the UI says Problem sets — the owner gives problem sets, not other
+  assignments): per class (optionally all sibling
   sections), title, instructions, due date/time (`'yyyy-MM-dd HH:mm'`,
   Manila), optional linked material (problem set), allow-late, shown/hidden,
   and a gradebook column (new by default; an existing column only if nobody
@@ -114,8 +116,9 @@ change log at the bottom for every change you ship.
   if allowed, marked late). Uploads: Drive file + **appendObject_ without the
   script lock** (deadline rush); latest row per student counts, the replaced
   file is trashed. Files: semester folder → Submissions → "<subject> <section>"
-  → "<title>" (folder made at creation). Admin: "📝 Assignments" on the class
-  page → submissions table, View, type scores (→ `saveScores_`), "🗑 Delete
+  → "<title>" (folder made at creation). Admin: "📝 Problem sets" on the class
+  page (the New form can take the problem-set PDF directly: it is uploaded as
+  a Problem-set Material for the same sections and linked) → submissions table, View, type scores (→ `saveScores_`), "🗑 Delete
   graded files" (dry-run count → confirm → trash files of students who have a
   score; row keeps `File Deleted At`, score stays). Tabs `Assignments`,
   `Submissions`.
@@ -286,3 +289,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   Verified on real data before deploying (temporary editor function, since
   removed): Materials migrated (Syllabus + TOS Final in all EE121 sections),
   only score-free columns offered, new tabs created.
+- **2026-11-14** — Portal deployment version 20: "Assignments" renamed
+  **Problem sets** everywhere people see it; the New form takes the problem
+  set PDF directly (added to Materials and linked); new gradebook columns get
+  type "Problem Set".
