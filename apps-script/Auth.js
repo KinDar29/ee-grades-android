@@ -124,6 +124,11 @@ function requireSession_(token, requiredRole, allowPendingChange) {
     throw new Error('MUST_CHANGE:Please choose a new password before continuing.');
   }
 
+  // Students confirm an e-mail address once before using the portal.
+  if (!allowPendingChange && claims.r === 'student' && needsEmail_(account)) {
+    throw new Error('MUST_EMAIL:Please confirm your e-mail address before continuing.');
+  }
+
   if (requiredRole === 'admin' && claims.r !== 'admin') {
     throw new Error('AUTH:This action needs an administrator account.');
   }
@@ -268,7 +273,8 @@ function doLogin_(role, username, password) {
   return {
     token: makeToken_(subject, role, str_(row['Password Hash'])),
     profile: profileOf_(role, row),
-    mustChangePassword: bool_(row['Must Change'])
+    mustChangePassword: bool_(row['Must Change']),
+    mustVerifyEmail: role === 'student' && needsEmail_(row)
   };
 }
 
@@ -291,7 +297,9 @@ function profileOf_(role, row) {
     lastName: str_(row['Last Name']),
     firstName: str_(row['First Name']),
     program: str_(row['Program']),
-    yearLevel: str_(row['Year Level'])
+    yearLevel: str_(row['Year Level']),
+    email: str_(row['Email']),
+    emailVerified: !!str_(row['Email Verified'])
   };
 }
 

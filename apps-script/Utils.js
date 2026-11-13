@@ -141,11 +141,24 @@ function ensureRows_(sheet, needed) {
 }
 
 /** Append one object as a row, matching by header name. */
+/**
+ * Columns whose values must stay text. Without this, Google Sheets turns a
+ * student number like "06-5160" into a date (June 5160) and "0123" into 123.
+ */
+var TEXT_COLUMNS = { 'Student ID': true, 'Set Password': true };
+
+/** Mark a value as plain text for setValues (the apostrophe is not stored in the value). */
+function asText_(v) {
+  if (typeof v !== 'string' || v === '' || v.charAt(0) === "'") return v;
+  return "'" + v;
+}
+
 function appendObject_(sheet, obj) {
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var row = headers.map(function (h) {
     var key = String(h).trim();
-    return obj.hasOwnProperty(key) && obj[key] !== undefined ? obj[key] : '';
+    var v = obj.hasOwnProperty(key) && obj[key] !== undefined ? obj[key] : '';
+    return TEXT_COLUMNS[key] ? asText_(v) : v;
   });
   sheet.appendRow(row);
   return sheet.getLastRow();
@@ -160,6 +173,8 @@ function updateObject_(sheet, rowNumber, obj) {
     if (obj.hasOwnProperty(headers[i]) && obj[headers[i]] !== undefined) {
       current[i] = obj[headers[i]];
     }
+    // the whole row is written back, so keep text columns as text
+    if (TEXT_COLUMNS[headers[i]]) current[i] = asText_(current[i]);
   }
   sheet.getRange(rowNumber, 1, 1, headers.length).setValues([current]);
 }

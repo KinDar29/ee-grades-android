@@ -88,7 +88,8 @@ SCHEMA[TAB.STUDENTS] = [
   'Student ID', 'Last Name', 'First Name', 'Middle Name',
   'Program', 'Year Level', 'Email', 'Status', 'Set Password',
   'Password Hash', 'Salt', 'Applied Set', 'Must Change',
-  'Password Updated', 'Emailed Set', 'Password Emailed', 'Last Login', 'Created At'
+  'Password Updated', 'Emailed Set', 'Password Emailed', 'Last Login', 'Created At',
+  'Email Verified', 'Registered'
 ];
 
 SCHEMA[TAB.SEMESTERS] = [
@@ -146,6 +147,8 @@ var DEFAULT_SETTINGS = [
   ['SHOW_CLASS_AVERAGE', 'TRUE', 'TRUE = students see the class average next to their own score.'],
   ['COUNT_BLANK_AS_ZERO', 'FALSE', 'FALSE = blank scores are treated as "not yet recorded". TRUE = blanks count as zero.'],
   ['ALLOW_PASSWORD_CHANGE', 'TRUE', 'TRUE = students may change their own password.'],
+  ['REGISTRATION_OPEN', 'TRUE', 'TRUE = new students can create their own account (verified by e-mail) from the sign-in page.'],
+  ['REQUIRE_EMAIL_VERIFY', 'TRUE', 'TRUE = every student must confirm an e-mail address with a code before using the portal.'],
   ['DEFAULT_PASSWORD', 'ee2026', 'Password used for a student whose "Set Password" cell is blank and who has never logged in.'],
   ['ACTIVE_SEMESTER_ID', '', 'Semester opened by default. Managed from the admin dashboard.'],
   ['SUMMARY_CHAIR_NAME', '', 'Program Coordinator / Department Chair printed on the Summary of Grades. Blank = keep the name in the template.'],

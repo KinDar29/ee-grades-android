@@ -701,7 +701,7 @@ function enrollStudents_(session, sectionId, studentIds) {
       var rec = registry[key];
       if (!rec) { missing.push(sid); return; }
       added.push([
-        str_(rec['Student ID']), str_(rec['Last Name']),
+        asText_(str_(rec['Student ID'])), str_(rec['Last Name']),
         str_(rec['First Name'])
       ]);
       present[key] = true;
@@ -786,7 +786,7 @@ function rebuildSummary_(session, sectionId) {
     var rows = data.roster.map(function (s) {
       var g = computeGrade_(data.assessments, s.scores, options);
       return [
-        s.studentId,
+        asText_(s.studentId),
         [s.lastName, s.firstName].filter(String).join(', '),
         g.earned, g.possible, g.percent, g.grade, g.remark,
         g.recorded + ' / ' + g.items, stamp

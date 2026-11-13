@@ -47,6 +47,20 @@ change log at the bottom for every change you ship.
   `completePasswordReset_`, codes in CacheService), `resetSharedPasswords()`.
 - `Master.js` — semesters, subjects, sections, student registry, imports,
   enrollment index.
+- `Registration.js` — **self-registration**: "Create your account" on the
+  sign-in page (Settings `REGISTRATION_OPEN`, blank = on) → form (student
+  number `^\d{2}-\d{4,6}$`, names, program from existing Students programs,
+  year, e-mail, password, classes of the active semester) → 6-digit code
+  e-mailed (`register.start`; pending data + password hash in CacheService,
+  30 min) → `register.verify` creates the Students row (active at once, own
+  password, `Email Verified` + `Registered` stamped) and enrols via
+  `enrollStudents_`. **E-mail gate** for everyone else: students without
+  `Email Verified` get `MUST_EMAIL:` from `requireSession_` (Settings
+  `REQUIRE_EMAIL_VERIFY`, blank = on) until `account.email.send` /
+  `account.email.verify`; login/session return `mustVerifyEmail`. Limits: 5
+  codes/hour per number and per address, 150/hour portal-wide, 5 wrong tries.
+  The Android app does not handle `MUST_EMAIL` yet — students must verify in
+  the portal once before the app works.
 - `Sections.js` — per-section spreadsheets (Info / Grades / Assessments /
   Summary), assessment syncing, grade computation (`computeGrade_`).
 - New-score notifications: `student.updates` (`studentUpdates_` in `Api.js`)
@@ -101,7 +115,9 @@ change log at the bottom for every change you ship.
   (Syllabus / TOS ME / TOS FE) was copied in once by `migrateCourseFiles_`
   (Script Property `MATERIALS_MIGRATED`) and is no longer read. Files live in
   the semester's Drive folder → "Course Files", NOT shared — students get the
-  bytes through `student.material` (enrolled + released only; the app's
+  bytes through `student.material` (enrolled + released only; `downloadable`
+  is true only for Problem sets — every other type opens view-only: no
+  Download button, right-click/drag/Ctrl+S/Ctrl+P/print blocked; the app's
   `student.file` is the same call with `kind` = Material ID) and the page
   draws them with pdf.js 4.10.38 from cdnjs. `student.class` returns
   `materials` (released only) and the older `files` list for app 1.2.0.
@@ -166,6 +182,11 @@ change log at the bottom for every change you ship.
 Rules that matter:
 - Writes to the master sheet go through `withLock_`. `rebuildRoster_` always
   takes the lock (the enrollment index is rewritten as a whole).
+- Student numbers must be written as text: `appendObject_` / `updateObject_`
+  apostrophe-prefix the `TEXT_COLUMNS` ('Student ID', 'Set Password'), and
+  bulk `setValues` of IDs go through `asText_()`. Otherwise Sheets turns IDs
+  like "06-5160" into dates (June 5160) — `updateObject_` rewrites the whole
+  row, so one missed path re-breaks an ID on the next login.
 - Students tab columns are found **by header name**. New columns added to
   `SCHEMA` are created automatically by `ensureColumns_` on first use.
 - Passwords: never reintroduce a shared default. New accounts get
@@ -321,4 +342,12 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   node-voltage items re-computed and matched). Imported by a temporary editor
   function reading a temporary Drive JSON (both removed). Question text is
   never committed here — the repo is public.
-
+- **2026-11-14** — Portal deployment version 22: students can download only
+  Problem-set materials; modules, syllabus, TOS and other materials are
+  view-only in the portal (admins can still download everything).
+  Also: student numbers are always stored as text — "06-5160" had been saved
+  as the date June 5160 (owner's test account, deleted; no real student hit).
+- **2026-11-14** — (version 22) Student self-registration with e-mail
+  verification (owner's choices: active at once, students pick their
+  classes) and a one-time "confirm your e-mail" step for every existing
+  student before they can use the portal.

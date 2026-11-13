@@ -43,8 +43,10 @@ function api(request) {
     if (needsAuth) message = message.substring(5);
     var mustChange = message.indexOf('MUST_CHANGE:') === 0;
     if (mustChange) message = message.substring(12);
+    var mustEmail = message.indexOf('MUST_EMAIL:') === 0;
+    if (mustEmail) message = message.substring(11);
     console.error(action + ' → ' + message + (err && err.stack ? '\n' + err.stack : ''));
-    return JSON.stringify({ ok: false, error: message, authRequired: needsAuth, mustChangePassword: mustChange });
+    return JSON.stringify({ ok: false, error: message, authRequired: needsAuth, mustChangePassword: mustChange, mustVerifyEmail: mustEmail });
   }
 }
 
@@ -68,14 +70,30 @@ function route_(action, p, token) {
       return completePasswordReset_(p.role === 'admin' ? 'admin' : 'student',
         p.username, p.code, p.newPassword);
 
+    case 'register.options':
+      return registrationOptions_();
+
+    case 'register.start':
+      return registrationStart_(p);
+
+    case 'register.verify':
+      return registrationVerify_(p);
+
     /* ---- signed in (either role) ---- */
     case 'session': {
       var s = requireSession_(token, null, true);
       return {
         profile: profileOf_(s.role, s.row),
-        mustChangePassword: bool_(s.row['Must Change'])
+        mustChangePassword: bool_(s.row['Must Change']),
+        mustVerifyEmail: s.role === 'student' && needsEmail_(s.row)
       };
     }
+
+    case 'account.email.send':
+      return sendEmailCode_(requireSession_(token, null, true), p);
+
+    case 'account.email.verify':
+      return verifyEmailCode_(requireSession_(token, null, true), p);
 
     case 'changePassword': {
       var s2 = requireSession_(token, null, true);
@@ -254,7 +272,8 @@ function publicPortalInfo_() {
     subtitle: s['PORTAL_SUBTITLE'] || 'Student Grades Portal',
     announcement: s['ANNOUNCEMENT'] || '',
     contactEmail: s['CONTACT_EMAIL'] || '',
-    allowPasswordChange: bool_(s['ALLOW_PASSWORD_CHANGE'])
+    allowPasswordChange: bool_(s['ALLOW_PASSWORD_CHANGE']),
+    registrationOpen: registrationOpen_()
   };
 }
 
