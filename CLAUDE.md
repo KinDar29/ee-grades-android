@@ -313,3 +313,12 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   blurs the questions until the student returns, copy/paste/right-click
   off, student name + ID watermark, optional "lock after N exits" (default 3
   on new exams) that submits the answers so far; "🔒 locked" in Results.
+- **2026-11-14** — Portal deployment version 21 is live. Data only: EE121
+  question bank ("EE121 — Question Bank", root → Question Banks, private)
+  filled with 300 items from `EE121_Unit8_Lesson1_Question_Bank.pdf` — IDs
+  `U8L1-E001…E100 / M001…M100 / H001…H100`, Unit "Unit 8", Level Easy /
+  Medium / Hard, keys from the PDF's answer key (75 per letter; Hard
+  node-voltage items re-computed and matched). Imported by a temporary editor
+  function reading a temporary Drive JSON (both removed). Question text is
+  never committed here — the repo is public.
+
