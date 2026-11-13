@@ -90,15 +90,21 @@ change log at the bottom for every change you ship.
   html-to-image 1.11.13 (jsDelivr) and placed on A4 pages with pdf-lib 1.17.1
   (cdnjs). Follows the section dropdown. Download names are forced to ASCII
   (Chrome drops names containing "–").
-- `CourseFiles.js` — Syllabus / TOS (Midterm Exam) / TOS (Final Exam) PDFs
-  per class. Admin: "📄 Course files" on the class page (upload ≤ 10 MB PDF,
-  optionally to every section of the same subject that semester; replace;
-  "Shown to students" toggle; remove). Files live in the semester's Drive
-  folder → "Course Files" and are NOT shared — students get the bytes through
-  `student.file` (enrolled + visible only) and the page draws them with pdf.js
-  4.10.38 from cdnjs (falls back to Download). Master tab `CourseFiles`, one
-  row per class + kind; a Drive file is trashed when no row uses it.
-  `student.class` returns `files` (visible only).
+- `CourseFiles.js` — class **Materials**: any number of PDFs per class
+  (types Module / Problem set / Syllabus / TOS / Other), each with a title,
+  a week/unit group, a position (▲▼), Shown/Hidden and an optional "show
+  from" date. Admin: "📄 Materials" on the class page (`manageMaterials` in
+  App.html): upload ≤ 20 MB PDF, optionally to every section of the same
+  subject that semester; edit, reorder, replace the file, remove. Master tab
+  `Materials` (one row per class + material; rows may share a Drive file,
+  trashed when no row uses it). The first version's `CourseFiles` tab
+  (Syllabus / TOS ME / TOS FE) was copied in once by `migrateCourseFiles_`
+  (Script Property `MATERIALS_MIGRATED`) and is no longer read. Files live in
+  the semester's Drive folder → "Course Files", NOT shared — students get the
+  bytes through `student.material` (enrolled + released only; the app's
+  `student.file` is the same call with `kind` = Material ID) and the page
+  draws them with pdf.js 4.10.38 from cdnjs. `student.class` returns
+  `materials` (released only) and the older `files` list for app 1.2.0.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -235,3 +241,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   must change).
 - **2026-11-12** — Short link https://kindar29.github.io/ee-grades-android/
   (GitHub Pages) that always opens the portal's clean address.
+- **2026-11-14** — Materials (portal not deployed yet): modules, problem sets,
+  syllabus and TOS as any number of PDFs per class, grouped by week/unit, with
+  order, show/hide and show-from dates; replaces the fixed three course files
+  (migrated automatically).

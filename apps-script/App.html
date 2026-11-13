@@ -626,7 +626,7 @@ function renderStudentClass(sectionId) {
       '</div></div></div>';
     }
 
-    html += courseFilesCard(sec.id, d.files);
+    html += materialsCard(sec.id, d.materials || []);
 
     if (d.showRunningGrade) {
       html += '<div class="card"><div class="card-body">' +
@@ -697,7 +697,7 @@ function renderStudentClass(sectionId) {
 
     setContent(html);
     $('#backHome').addEventListener('click', renderStudentHome);
-    bindFileButtons('student.file');
+    bindFileButtons('student.material');
 
     // Everything on this screen has now been seen.
     if (seen.init) {
@@ -801,129 +801,221 @@ function openPdf(res) {
   });
 }
 
-/** Student class page: list of the files the admin made visible. */
-function courseFilesCard(sectionId, files) {
-  if (!files || !files.length) return '';
-  return '<div class="card"><div class="card-head"><h3>Course files</h3></div><div class="card-body tight">' +
-    '<div class="file-list">' + files.map(function (f) {
-      return '<div class="file-row"><span class="file-ic">PDF</span>' +
-        '<div class="file-txt"><b>' + esc(f.label) + '</b><div class="tiny muted">' + esc(f.name) +
-        (f.size ? ' · ' + fileSize(f.size) : '') + '</div></div>' +
-        '<button class="btn sm" data-view-file="' + esc(f.kind) + '" data-section="' + esc(sectionId) + '">View</button></div>';
-    }).join('') + '</div></div></div>';
+/** Materials in display order, grouped by week/unit (first appearance order). */
+function groupMaterials(list) {
+  var groups = [], byName = {};
+  list.forEach(function (m) {
+    var g = m.group || '';
+    if (!byName[g]) { byName[g] = { name: g, items: [] }; groups.push(byName[g]); }
+    byName[g].items.push(m);
+  });
+  return groups;
 }
 
-function bindFileButtons(action) {
-  $$('[data-view-file]').forEach(function (b) {
+function materialTypeBadge(m) {
+  var cls = { MODULE: 'green', PROBLEM_SET: 'gold', SYLLABUS: '', TOS: '', OTHER: 'grey' }[m.type] || '';
+  return '<span class="badge ' + cls + '">' + esc(m.typeLabel || m.type) + '</span>';
+}
+
+/** Student class page: the released materials, grouped by week/unit. */
+function materialsCard(sectionId, list) {
+  if (!list || !list.length) return '';
+  return '<div class="card"><div class="card-head"><h3>Materials</h3><div class="spacer"></div>' +
+    '<span class="small muted">' + list.length + ' file' + (list.length === 1 ? '' : 's') + '</span></div>' +
+    '<div class="card-body tight">' + groupMaterials(list).map(function (g) {
+      return (g.name ? '<div class="mat-group">' + esc(g.name) + '</div>' : '') +
+        '<div class="file-list">' + g.items.map(function (m) {
+          return '<div class="file-row"><span class="file-ic">PDF</span>' +
+            '<div class="file-txt"><b>' + esc(m.title) + '</b> ' + materialTypeBadge(m) +
+            '<div class="tiny muted">' + esc(m.name) + (m.size ? ' · ' + fileSize(m.size) : '') + '</div></div>' +
+            '<button class="btn sm" data-view-file="' + esc(m.id) + '" data-section="' + esc(sectionId) + '">View</button></div>';
+        }).join('') + '</div>';
+    }).join('') + '</div></div>';
+}
+
+function bindFileButtons(action, root) {
+  $$('[data-view-file]', root || document).forEach(function (b) {
     b.addEventListener('click', function () {
       var btn = this;
       busy(btn, true, 'Opening…');
-      call(action, { sectionId: btn.dataset.section, kind: btn.dataset.viewFile })
+      call(action, { sectionId: btn.dataset.section, id: btn.dataset.viewFile })
         .then(function (res) { busy(btn, false); openPdf(res); })
         .catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
     });
   });
 }
 
-/** Admin: upload / replace / show-hide / remove the class's files. */
-function manageCourseFiles(section) {
+function readPdfFile(file, maxBytes) {
+  return new Promise(function (resolve, reject) {
+    if (!file) return reject(new Error('Choose a PDF first.'));
+    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+      return reject(new Error('Please choose a PDF. Save Word or Excel files as PDF first.'));
+    }
+    if (file.size > maxBytes) return reject(new Error('The file is larger than ' + fileSize(maxBytes) + '.'));
+    var reader = new FileReader();
+    reader.onload = function () { resolve(String(reader.result).replace(/^data:[^,]*,/, '')); };
+    reader.onerror = function () { reject(new Error('The file could not be read.')); };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Admin: upload, arrange, show/hide, schedule, replace and remove materials. */
+function manageMaterials(section) {
   var m = openModal({
-    title: 'Course files · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name,
+    title: 'Materials · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name,
     wide: true,
     body: '<div class="loading"><span class="spinner"></span> Loading…</div>',
-    footer: '<button class="btn primary" data-close="1">Done</button>'
+    footer: '<span class="small muted">Students see shown materials on their class page, grouped by week/unit.</span>' +
+      '<div class="spacer"></div><button class="btn primary" data-close="1">Done</button>'
   });
+  m.root.querySelector('.modal').classList.add('materials');
   var body = m.root.querySelector('.body');
-  var input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'application/pdf,.pdf';
-  input.style.display = 'none';
-  m.root.appendChild(input);
-  var pendingKind = null, data = null;
+  var data = null, editing = null;
+  var replaceInput = document.createElement('input');
+  replaceInput.type = 'file';
+  replaceInput.accept = 'application/pdf,.pdf';
+  replaceInput.style.display = 'none';
+  m.root.appendChild(replaceInput);
+  var replacing = null;
+
+  function typeOptions(sel) {
+    return data.types.map(function (t) {
+      return '<option value="' + t.id + '"' + (t.id === sel ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+    }).join('');
+  }
+
+  function status(mt) {
+    if (!mt.visible) return '<span class="badge grey">Hidden</span>';
+    if (mt.visibleFrom && mt.visibleFrom > data.today) return '<span class="badge gold">Shows from ' + esc(mt.visibleFrom) + '</span>';
+    return '<span class="badge green">Shown</span>';
+  }
 
   function draw(d) {
-    data = d;
-    var byKind = {};
-    d.files.forEach(function (f) { byKind[f.kind] = f; });
-    var html = '<p class="small muted" style="margin:0 0 12px">PDF only, up to ' + fileSize(d.maxBytes) +
-      '. Students of this class see the files marked <b>Shown to students</b> on their class page. ' +
-      'The files stay private in your Drive (semester folder → Course Files).</p><div class="file-list">';
-    d.kinds.forEach(function (k) {
-      var f = byKind[k.id];
-      html += '<div class="file-row"><span class="file-ic' + (f ? '' : ' none') + '">PDF</span>' +
-        '<div class="file-txt"><b>' + esc(k.label) + '</b><div class="tiny muted">' +
-        (f ? esc(f.name) + ' · ' + fileSize(f.size) + ' · uploaded ' + esc(f.uploaded) : 'Not uploaded yet') + '</div>' +
-        (f ? '<label class="check tiny"><input type="checkbox" data-vis="' + k.id + '"' + (f.visible ? ' checked' : '') +
-          '> Shown to students</label>' : '') + '</div>' +
-        '<div class="file-acts">' +
-        (f ? '<button class="btn sm" data-view-file="' + k.id + '" data-section="' + esc(section.id) + '">View</button>' : '') +
-        '<button class="btn sm' + (f ? '' : ' primary') + '" data-up="' + k.id + '">' + (f ? 'Replace' : '⬆ Upload PDF') + '</button>' +
-        (f ? '<button class="btn sm ghost" data-rm="' + k.id + '" title="Remove">✕</button>' : '') +
-        '</div></div>';
-    });
-    html += '</div>';
-    if (d.siblings.length) {
-      html += '<div class="field" style="margin-top:16px"><label>When uploading, also use the file for</label>' +
-        d.siblings.map(function (s) {
-          return '<label class="check small"><input type="checkbox" data-also="' + esc(s.id) + '" checked> ' + esc(s.name) + '</label>';
-        }).join('') + '<span class="hint">Other sections of the same subject this semester.</span></div>';
+    if (d) data = d;
+    var html =
+      '<details class="mat-add"' + (data.materials.length ? '' : ' open') + '><summary><b>＋ Add a PDF</b> ' +
+      '<span class="small muted">module, problem set, syllabus, TOS… up to ' + fileSize(data.maxBytes) + '</span></summary>' +
+      '<div class="mat-form">' +
+      '<div class="field"><label>PDF file</label><input type="file" id="matFile" accept="application/pdf,.pdf"></div>' +
+      '<div class="grid2">' +
+      '<div class="field"><label>Title</label><input type="text" id="matTitle" maxlength="150" placeholder="e.g. Module 3 · Three-phase circuits"></div>' +
+      '<div class="field"><label>Type</label><select id="matType">' + typeOptions('MODULE') + '</select></div>' +
+      '<div class="field"><label>Week / unit</label><input type="text" id="matGroup" maxlength="80" list="matGroups" placeholder="e.g. Unit V or Week 12">' +
+      '<datalist id="matGroups">' + data.groups.map(function (g) { return '<option value="' + esc(g) + '">'; }).join('') + '</datalist></div>' +
+      '<div class="field"><label>Show to students from <span class="faint">(optional)</span></label><input type="date" id="matFrom"></div>' +
+      '</div>' +
+      '<label class="check"><input type="checkbox" id="matVisible" checked> Shown to students</label>' +
+      (data.siblings.length ? '<div class="field" style="margin-top:10px"><label>Also add to</label>' + data.siblings.map(function (s) {
+        return '<label class="check small"><input type="checkbox" data-also="' + esc(s.id) + '" checked> ' + esc(s.name) + '</label>';
+      }).join('') + '<span class="hint">Other sections of the same subject this semester.</span></div>' : '') +
+      '<div class="row" style="margin-top:12px"><div class="spacer"></div><button class="btn primary" id="matUpload">⬆ Upload</button></div>' +
+      '</div></details>';
+
+    if (!data.materials.length) {
+      html += '<p class="small muted" style="margin:14px 2px 0">No materials yet for this class.</p>';
     }
+    var flat = data.materials, pos = {};
+    flat.forEach(function (mt, i) { pos[mt.id] = i; });
+    html += groupMaterials(flat).map(function (g) {
+      return '<div class="mat-group">' + (g.name ? esc(g.name) : '<span class="faint">No week / unit</span>') + '</div>' +
+        '<div class="file-list">' + g.items.map(function (mt) {
+          var i = pos[mt.id];
+          if (editing === mt.id) {
+            return '<div class="file-row mat-edit" data-id="' + esc(mt.id) + '"><div class="grid2" style="flex:1">' +
+              '<div class="field"><label>Title</label><input type="text" data-f="title" maxlength="150" value="' + esc(mt.title) + '"></div>' +
+              '<div class="field"><label>Type</label><select data-f="type">' + typeOptions(mt.type) + '</select></div>' +
+              '<div class="field"><label>Week / unit</label><input type="text" data-f="group" maxlength="80" list="matGroups" value="' + esc(mt.group) + '"></div>' +
+              '<div class="field"><label>Show from</label><input type="date" data-f="visibleFrom" value="' + esc(mt.visibleFrom) + '"></div>' +
+              '<label class="check"><input type="checkbox" data-f="visible"' + (mt.visible ? ' checked' : '') + '> Shown to students</label>' +
+              '<div class="row" style="justify-content:flex-end;gap:6px"><button class="btn sm ghost" data-cancel="1">Cancel</button>' +
+              '<button class="btn sm primary" data-save="' + esc(mt.id) + '">Save</button></div></div></div>';
+          }
+          return '<div class="file-row" data-id="' + esc(mt.id) + '"><span class="file-ic">PDF</span>' +
+            '<div class="file-txt"><b>' + esc(mt.title) + '</b> ' + materialTypeBadge(mt) + ' ' + status(mt) +
+            '<div class="tiny muted">' + esc(mt.name) + ' · ' + fileSize(mt.size) + ' · uploaded ' + esc(mt.uploaded) + '</div></div>' +
+            '<div class="file-acts">' +
+            '<button class="btn sm ghost icon" data-move="-1" title="Move up"' + (i === 0 ? ' disabled' : '') + '>▲</button>' +
+            '<button class="btn sm ghost icon" data-move="1" title="Move down"' + (i === flat.length - 1 ? ' disabled' : '') + '>▼</button>' +
+            '<button class="btn sm" data-view-file="' + esc(mt.id) + '" data-section="' + esc(section.id) + '">View</button>' +
+            '<button class="btn sm" data-edit="' + esc(mt.id) + '">Edit</button>' +
+            '<button class="btn sm" data-replace="' + esc(mt.id) + '">Replace</button>' +
+            '<button class="btn sm ghost" data-rm="' + esc(mt.id) + '" title="Remove">✕</button>' +
+            '</div></div>';
+        }).join('') + '</div>';
+    }).join('');
+
     body.innerHTML = html;
-    bindFileButtons('admin.file');
-    $$('[data-up]', body).forEach(function (b) {
-      b.addEventListener('click', function () { pendingKind = this.dataset.up; input.value = ''; input.click(); });
+    bind();
+  }
+
+  function run(action, params, msg) {
+    body.classList.add('is-busy');
+    return call(action, Object.assign({ sectionId: section.id }, params))
+      .then(function (d) { body.classList.remove('is-busy'); editing = null; draw(d); if (msg) toast(msg); })
+      .catch(function (err) { body.classList.remove('is-busy'); toast(err.message, 'error'); draw(); });
+  }
+
+  function bind() {
+    bindFileButtons('admin.material', body);
+    var fileIn = $('#matFile', body), titleIn = $('#matTitle', body);
+    if (fileIn) fileIn.addEventListener('change', function () {
+      var f = fileIn.files && fileIn.files[0];
+      if (f && !titleIn.value.trim()) titleIn.value = f.name.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ');
     });
-    $$('[data-vis]', body).forEach(function (c) {
-      c.addEventListener('change', function () {
-        var el = this;
-        el.disabled = true;
-        call('admin.files.visible', { sectionId: section.id, kind: el.dataset.vis, visible: el.checked })
-          .then(function (d2) { draw(d2); toast(el.checked ? 'Students can now see it.' : 'Hidden from students.'); })
-          .catch(function (err) { el.disabled = false; el.checked = !el.checked; toast(err.message, 'error'); });
+    var up = $('#matUpload', body);
+    if (up) up.addEventListener('click', function () {
+      var f = fileIn.files && fileIn.files[0];
+      var also = $$('[data-also]', body).filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.also; });
+      var params = {
+        type: $('#matType', body).value, title: titleIn.value.trim(), group: $('#matGroup', body).value.trim(),
+        visibleFrom: $('#matFrom', body).value, visible: $('#matVisible', body).checked, alsoSectionIds: also
+      };
+      busy(up, true, 'Uploading…');
+      readPdfFile(f, data.maxBytes).then(function (b64) {
+        return run('admin.materials.upload', Object.assign(params, { name: f.name, mimeType: 'application/pdf', data: b64 }),
+          'Uploaded' + (also.length ? ' to ' + (also.length + 1) + ' sections' : '') + '.');
+      }).catch(function (err) { busy(up, false); toast(err.message, 'error'); });
+    });
+    $$('[data-move]', body).forEach(function (b) {
+      b.addEventListener('click', function () {
+        run('admin.materials.move', { id: this.closest('[data-id]').dataset.id, dir: Number(this.dataset.move) });
       });
+    });
+    $$('[data-edit]', body).forEach(function (b) {
+      b.addEventListener('click', function () { editing = this.dataset.edit; draw(); });
+    });
+    $$('[data-cancel]', body).forEach(function (b) {
+      b.addEventListener('click', function () { editing = null; draw(); });
+    });
+    $$('[data-save]', body).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var row = this.closest('[data-id]'), v = {};
+        $$('[data-f]', row).forEach(function (el) { v[el.dataset.f] = el.type === 'checkbox' ? el.checked : el.value; });
+        run('admin.materials.update', Object.assign({ id: this.dataset.save }, v), 'Saved.');
+      });
+    });
+    $$('[data-replace]', body).forEach(function (b) {
+      b.addEventListener('click', function () { replacing = this.dataset.replace; replaceInput.value = ''; replaceInput.click(); });
     });
     $$('[data-rm]', body).forEach(function (b) {
       b.addEventListener('click', function () {
-        var kind = this.dataset.rm;
-        var label = d.kinds.filter(function (k) { return k.id === kind; })[0].label;
-        confirmDialog('Remove ' + label + '?', 'Students of this class will no longer see it. Other sections keep their copy.', 'Remove', true)
-          .then(function (ok) {
-            if (!ok) return;
-            body.innerHTML = '<div class="loading"><span class="spinner"></span> Removing…</div>';
-            call('admin.files.remove', { sectionId: section.id, kind: kind }).then(draw)
-              .catch(function (err) { toast(err.message, 'error'); draw(d); });
-          });
+        var id = this.dataset.rm;
+        var mt = data.materials.filter(function (x) { return x.id === id; })[0];
+        confirmDialog('Remove “' + mt.title + '”?', 'Students of this class will no longer see it. Other sections keep their copy.', 'Remove', true)
+          .then(function (ok) { if (ok) run('admin.materials.remove', { id: id }, 'Removed.'); });
       });
     });
   }
 
-  input.addEventListener('change', function () {
-    var file = input.files && input.files[0];
-    if (!file || !pendingKind) return;
-    if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
-      toast('Please choose a PDF. Save Word or Excel files as PDF first.', 'error');
-      return;
-    }
-    if (file.size > data.maxBytes) { toast('The file is larger than ' + fileSize(data.maxBytes) + '.', 'error'); return; }
-    var also = $$('[data-also]', body).filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.also; });
-    var kind = pendingKind;
-    body.innerHTML = '<div class="loading"><span class="spinner"></span> Uploading ' + esc(file.name) + '…</div>';
-    var reader = new FileReader();
-    reader.onload = function () {
-      var b64 = String(reader.result).replace(/^data:[^,]*,/, '');
-      call('admin.files.upload', {
-        sectionId: section.id, kind: kind, name: file.name, mimeType: 'application/pdf',
-        data: b64, visible: true, alsoSectionIds: also
-      }).then(function (d2) {
-        draw(d2);
-        toast('Uploaded' + (also.length ? ' to ' + (also.length + 1) + ' sections' : '') + '.');
-      }).catch(function (err) { toast(err.message, 'error'); draw(data); });
-    };
-    reader.onerror = function () { toast('The file could not be read.', 'error'); draw(data); };
-    reader.readAsDataURL(file);
+  replaceInput.addEventListener('change', function () {
+    var f = replaceInput.files && replaceInput.files[0], id = replacing;
+    if (!f || !id) return;
+    readPdfFile(f, data.maxBytes).then(function (b64) {
+      return run('admin.materials.replace', { id: id, name: f.name, mimeType: 'application/pdf', data: b64 }, 'File replaced.');
+    }).catch(function (err) { toast(err.message, 'error'); });
   });
 
-  call('admin.files', { sectionId: section.id }).then(draw).catch(function (err) {
+  call('admin.materials', { sectionId: section.id }).then(draw).catch(function (err) {
     body.innerHTML = '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>';
   });
 }
@@ -1868,7 +1960,7 @@ function drawGradebook() {
     '<a class="btn sm" target="_blank" rel="noopener" href="' + esc(d.spreadsheetUrl) + '">Open in Sheets ↗</a>' +
     '<button class="btn sm" id="gbAddStudents">+ Students</button>' +
     '<button class="btn sm primary" id="gbAddAsm">+ Requirement</button>' +
-    '<button class="btn sm" id="gbFiles">📄 Course files</button>' +
+    '<button class="btn sm" id="gbFiles">📄 Materials</button>' +
     '<button class="btn sm gold" id="gbExport">⬇ Class record (PDF)</button>' +
     '<button class="btn sm" id="gbMore">⋯</button>' +
   '</div>';
@@ -2011,7 +2103,7 @@ function bindGradebook() {
   });
 
   var filesBtn = $('#gbFiles');
-  if (filesBtn) filesBtn.addEventListener('click', function () { manageCourseFiles(d.section); });
+  if (filesBtn) filesBtn.addEventListener('click', function () { manageMaterials(d.section); });
 
   var exportBtn = $('#gbExport');
   if (exportBtn) exportBtn.addEventListener('click', function () {
