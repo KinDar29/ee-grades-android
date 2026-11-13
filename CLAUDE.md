@@ -275,11 +275,14 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   must change).
 - **2026-11-12** — Short link https://kindar29.github.io/ee-grades-android/
   (GitHub Pages) that always opens the portal's clean address.
-- **2026-11-14** — Materials: modules, problem sets,
+- **2026-11-14** — Portal deployment version 19. Materials: modules, problem sets,
   syllabus and TOS as any number of PDFs per class, grouped by week/unit, with
   order, show/hide and show-from dates; replaces the fixed three course files
   (migrated automatically).
-- **2026-11-14** — Assignments with PDF submissions (grading, delete graded
+- **2026-11-14** — (version 19) Assignments with PDF submissions (grading, delete graded
   files) and multiple-choice exams from a per-subject question bank (random
   sets, timer, autosave, release, item analysis). Existing graded columns are
   never written. `tab_` now survives two requests creating a new tab at once.
+  Verified on real data before deploying (temporary editor function, since
+  removed): Materials migrated (Syllabus + TOS Final in all EE121 sections),
+  only score-free columns offered, new tabs created.
