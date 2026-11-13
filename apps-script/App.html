@@ -149,7 +149,7 @@ function confirmDialog(title, message, confirmLabel, danger) {
   return new Promise(function (resolve) {
     var m = openModal({
       title: title,
-      body: '<p class="small" style="margin:0">' + esc(message) + '</p>',
+      body: '<p class="small" style="margin:0;white-space:pre-line">' + esc(message) + '</p>',
       footer: '<button class="btn" data-close="1">Cancel</button>' +
         '<button class="btn ' + (danger ? 'danger' : 'primary') + '" id="cfmYes">' +
         esc(confirmLabel || 'Confirm') + '</button>',
@@ -1266,13 +1266,13 @@ function examsCard(sectionId, list) {
         upcoming: '<span class="badge grey">Opens ' + esc(fmtWhen(e.opensAt)) + '</span>',
         open: '<span class="badge green">Open now</span>',
         in_progress: '<span class="badge gold">In progress</span>',
-        submitted: e.score !== null && e.score !== undefined
+        submitted: (e.locked ? '<span class="badge red">Locked</span> ' : '') + (e.score !== null && e.score !== undefined
           ? '<span class="badge green">Score ' + e.score + ' / ' + e.scoreItems + '</span>'
-          : '<span class="badge green">✓ Submitted</span>',
+          : (e.locked ? '' : '<span class="badge green">✓ Submitted</span>')),
         missed: '<span class="badge red">Closed</span>'
       }[e.state] || '';
-      var btn = e.state === 'open' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '">Start exam</button>'
-        : (e.state === 'in_progress' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '">Continue</button>' : '');
+      var btn = e.state === 'open' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '">Start exam</button>'
+        : (e.state === 'in_progress' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '">Continue</button>' : '');
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st +
         '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' minutes · open ' + esc(fmtWhen(e.opensAt)) +
         ' to ' + esc(fmtWhen(e.closesAt)) + '</div></div><div class="file-acts">' + btn + '</div></div>';
@@ -1319,9 +1319,12 @@ function bindStudentLms(sectionId) {
   });
   $$('[data-exam]').forEach(function (b) {
     b.addEventListener('click', function () {
-      var id = this.dataset.exam;
-      confirmDialog('Start the exam?', 'The timer starts now and keeps running even if you close the page. Answer every question, then press Submit.', 'Start', false)
-        .then(function (ok) { if (ok) renderExam(sectionId, id); });
+      var id = this.dataset.exam, max = Number(this.dataset.maxExits) || 0;
+      confirmDialog('Start the exam?', 'The timer starts now and keeps running even if you close the page. Answer every question, then press Submit.\n\n' +
+        'The exam opens in full screen. Stay on this page until you submit: switching apps or tabs, or leaving full screen, is recorded and your teacher sees it.' +
+        (max ? ' After ' + max + ' time' + (max === 1 ? '' : 's') + ' the exam locks and your answers are submitted.' : '') +
+        ' Copying and pasting are turned off.', 'Start', false)
+        .then(function (ok) { if (ok) { examFullscreen(); renderExam(sectionId, id); } });
     });
   });
 }
@@ -1333,16 +1336,17 @@ var EXAM = null;
 function renderExam(sectionId, examId) {
   loading('Opening the exam…');
   callRetry('student.exam.start', { sectionId: sectionId, examId: examId }).then(function (x) {
-    if (x.done) { examFinished(sectionId, { message: x.message }); return; }
+    if (x.done) { examGuardOff(); examFinished(sectionId, { message: x.message, locked: x.locked }); return; }
     var local = null;
     try { local = JSON.parse(localStorage.getItem('ee.exam.' + x.attemptId) || 'null'); } catch (e) { local = null; }
     EXAM = {
       sectionId: sectionId, x: x, offset: x.serverNow - Date.now(),
       answers: (local && local.a) || x.answers || [], away: Math.max((local && local.away) || 0, x.away || 0),
-      dirty: false, timer: null, saver: null, submitting: false
+      dirty: false, timer: null, saver: null, submitting: false, out: false
     };
     drawExam();
   }).catch(function (err) {
+    examGuardOff();
     setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>' +
       '<button class="btn" id="exBack">← Back to the class</button>');
     $('#exBack').addEventListener('click', function () { renderStudentClass(sectionId); });
@@ -1397,16 +1401,142 @@ function drawExam() {
   clearInterval(EXAM.saver);
   EXAM.saver = setInterval(function () { if (EXAM && EXAM.dirty) saveExamNow(); }, 75000 + Math.random() * 30000);
   window.onbeforeunload = function () { return 'Your exam is still running.'; };
-  document.addEventListener('visibilitychange', examAway);
+  examGuardOn();
 }
 
-function examAway() {
-  if (!EXAM || EXAM.submitting) return;
-  if (document.visibilityState === 'hidden') {
-    EXAM.away++;
-    examLocalSave();
-    saveExamNow();
+/* ---- exam guard: full screen, exits, blur, no copy, watermark ---- */
+
+function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+
+/** Ask for full screen (needs a click). Phones that can't (iPhone) just carry on. */
+function examFullscreen() {
+  var el = document.documentElement;
+  var req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req || fsElement()) return;
+  try {
+    var r = req.call(el);
+    if (r && r.then) r.then(function () { if (EXAM) EXAM.fs = true; }).catch(function () { /* not allowed here */ });
+  } catch (e) { /* not supported */ }
+}
+
+var EXAM_BLOCK = ['copy', 'cut', 'paste', 'contextmenu', 'selectstart', 'dragstart'];
+
+function examBlock(e) {
+  if (e.target && e.target.closest && e.target.closest('input[type="number"], input[type="text"], textarea')) return;
+  e.preventDefault();
+}
+
+function examKeys(e) {
+  var k = (e.key || '').toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && 'acxvpsu'.indexOf(k) > -1) e.preventDefault();
+  if (k === 'printscreen' || k === 'f12') e.preventDefault();
+}
+
+function examWatermark() {
+  var who = ((S.profile && S.profile.name) || '') + ' · ' + ((S.profile && S.profile.id) || '');
+  var x = function (t) { return String(t).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); };
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="200"><text x="20" y="120" transform="rotate(-24 180 100)" ' +
+    'font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#888">' + x(who) + '</text></svg>';
+  var mark = document.createElement('div');
+  mark.className = 'exam-mark';
+  mark.setAttribute('aria-hidden', 'true');
+  mark.style.backgroundImage = 'url("data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg) + '")';
+  document.body.appendChild(mark);
+}
+
+function examGuardOn() {
+  examGuardOff();
+  document.body.classList.add('exam-on');
+  examWatermark();
+  EXAM_BLOCK.forEach(function (t) { document.addEventListener(t, examBlock, true); });
+  document.addEventListener('keydown', examKeys, true);
+  document.addEventListener('visibilitychange', examVisibility);
+  document.addEventListener('fullscreenchange', examFsChange);
+  document.addEventListener('webkitfullscreenchange', examFsChange);
+  window.addEventListener('blur', examBlur);
+  window.addEventListener('focus', examFocus);
+  EXAM.hadFocus = document.hasFocus();
+  if (fsElement()) EXAM.fs = true;
+  if (EXAM.away && EXAM.x.maxExits) examWarn(false);
+}
+
+function examGuardOff() {
+  document.body.classList.remove('exam-on', 'exam-hidden');
+  $$('.exam-mark, .exam-cover').forEach(function (n) { n.remove(); });
+  EXAM_BLOCK.forEach(function (t) { document.removeEventListener(t, examBlock, true); });
+  document.removeEventListener('keydown', examKeys, true);
+  document.removeEventListener('visibilitychange', examVisibility);
+  document.removeEventListener('fullscreenchange', examFsChange);
+  document.removeEventListener('webkitfullscreenchange', examFsChange);
+  window.removeEventListener('blur', examBlur);
+  window.removeEventListener('focus', examFocus);
+  if (fsElement()) {
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    try { var r = exit && exit.call(document); if (r && r.catch) r.catch(function () {}); } catch (e) { /* ignore */ }
   }
+}
+
+function examVisibility() { if (document.visibilityState === 'hidden') examLeft(); else examBack(); }
+/** Lost focus (another window on a computer). Only once the page has had focus, and only if it lasts. */
+function examBlur() {
+  if (!EXAM || !EXAM.hadFocus) return;
+  setTimeout(function () { if (EXAM && !document.hasFocus()) examLeft(); }, 1200);
+}
+function examFocus() { if (EXAM) EXAM.hadFocus = true; examBack(); }
+function examFsChange() {
+  if (!EXAM) return;
+  if (fsElement()) { EXAM.fs = true; EXAM.fsAt = Date.now(); return; }
+  if (EXAM.fs && !EXAM.submitting && Date.now() - (EXAM.fsAt || 0) > 1000) examLeft();
+}
+
+/** One exit per trip away, however many events it fires. */
+function examLeft() {
+  if (!EXAM || EXAM.submitting || EXAM.out) return;
+  EXAM.out = true;
+  EXAM.away++;
+  document.body.classList.add('exam-hidden');
+  examLocalSave();
+  saveExamNow();
+  if (document.visibilityState === 'visible' && document.hasFocus()) examWarn(true);
+}
+
+function examBack() {
+  if (EXAM && document.hasFocus()) EXAM.hadFocus = true;
+  if (!EXAM || !EXAM.out || document.visibilityState !== 'visible') return;
+  examWarn(true);
+}
+
+/** Cover the questions until the student chooses to go back. */
+function examWarn(blocking) {
+  if (!EXAM) return;
+  $$('.exam-cover').forEach(function (n) { n.remove(); });
+  var max = EXAM.x.maxExits || 0, n = EXAM.away;
+  var left = max ? max - n : 0;
+  var msg = 'You have left the exam ' + n + ' time' + (n === 1 ? '' : 's') + '. Your teacher can see this.';
+  if (max) msg += left > 0 ? ' ' + (left === 1 ? 'One more time' : left + ' more times') + ' and the exam locks.' : '';
+  var cover = document.createElement('div');
+  cover.className = 'exam-cover';
+  cover.innerHTML = '<div class="exam-cover-box"><div style="font-size:34px">⚠</div><h3>' + (blocking ? 'You left the exam' : 'Before you continue') + '</h3>' +
+    '<p>' + esc(msg) + '</p><button class="btn primary" id="exResume">Back to the exam</button></div>';
+  document.body.appendChild(cover);
+  $('#exResume', cover).addEventListener('click', function () {
+    examFullscreen();
+    cover.remove();
+    document.body.classList.remove('exam-hidden');
+    if (EXAM) EXAM.out = false;
+  });
+}
+
+function examLocked(r) {
+  if (!EXAM) return;
+  var ex = EXAM;
+  ex.submitting = true;
+  clearInterval(ex.timer);
+  clearInterval(ex.saver);
+  try { localStorage.removeItem('ee.exam.' + ex.x.attemptId); } catch (e) { /* ignore */ }
+  examGuardOff();
+  EXAM = null;
+  examFinished(ex.sectionId, { message: r.message || 'Your exam was locked.', submittedAt: r.submittedAt, locked: true });
 }
 
 function updateExamCount() {
@@ -1433,6 +1563,7 @@ function saveExamNow() {
   EXAM.dirty = false;
   callRetry('student.exam.save', { attemptId: EXAM.x.attemptId, answers: sent, away: EXAM.away }, 3).then(function (r) {
     if (!EXAM) return;
+    if (r.locked) { examLocked(r); return; }
     if (r.serverNow) EXAM.offset = r.serverNow - Date.now();
     var el = $('#exSaved');
     if (el) el.textContent = r.done ? 'already submitted' : 'saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -1460,8 +1591,9 @@ function submitExamNow(timeUp) {
   callRetry('student.exam.submit', { attemptId: ex.x.attemptId, answers: ex.answers, away: ex.away }, 6).then(function (r) {
     try { localStorage.removeItem('ee.exam.' + ex.x.attemptId); } catch (e) { /* ignore */ }
     window.onbeforeunload = null;
-    document.removeEventListener('visibilitychange', examAway);
+    examGuardOff();
     EXAM = null;
+    if (r.locked) r.score = null;
     examFinished(ex.sectionId, r);
   }).catch(function (err) {
     ex.submitting = false;
@@ -1472,8 +1604,10 @@ function submitExamNow(timeUp) {
 
 function examFinished(sectionId, r) {
   window.onbeforeunload = null;
+  examGuardOff();
   setContent('<div class="card" style="max-width:560px;margin:40px auto"><div class="card-body" style="text-align:center;padding:32px">' +
-    '<div style="font-size:42px">✓</div><h2 style="margin:6px 0">' + (r.message ? esc(r.message) : 'Exam submitted') + '</h2>' +
+    (r.locked ? '<div style="font-size:42px">🔒</div><h2 style="margin:6px 0">Exam locked</h2><p>' + esc(r.message || '') + '</p>'
+      : '<div style="font-size:42px">✓</div><h2 style="margin:6px 0">' + (r.message ? esc(r.message) : 'Exam submitted') + '</h2>') +
     (r.submittedAt ? '<p class="muted">Received ' + esc(r.submittedAt) + (r.late ? ' (after the time limit — your last saved answers were used)' : '') + '.</p>' : '') +
     (r.score !== null && r.score !== undefined ? '<p style="font-size:22px;margin:14px 0"><b>' + r.score + ' / ' + r.items + '</b></p>'
       : (r.submittedAt ? '<p class="small muted">Your score will appear here once your teacher releases it.</p>' : '')) +
@@ -1708,6 +1842,15 @@ function manageAssignments(section) {
 
 /* --------------------------------- exams ---------------------------------- */
 
+/** "Lock after N exits" input (0 = never). */
+function exitsField(id, value) {
+  return '<div class="field" style="margin-top:10px"><label for="' + id + '">Lock the exam after <span class="faint">(times a student leaves it)</span></label>' +
+    '<div class="row" style="gap:8px"><input type="number" id="' + id + '" min="0" max="20" value="' + (Number(value) || 0) + '" style="width:80px;text-align:right">' +
+    '<span class="small muted">exits · 0 = never lock (exits are still counted)</span></div>' +
+    '<div class="tiny faint" style="margin-top:4px">Every exam opens in full screen, hides the questions when the student leaves, turns off copy/paste and shows the student’s name and ID across the page. ' +
+    'A locked exam is submitted with the answers so far; <b>Reset</b> in Results lets the student start over.</div></div>';
+}
+
 function manageExams(section) {
   var M = lmsModal('Exams · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
   var data = null;
@@ -1752,6 +1895,7 @@ function manageExams(section) {
         '<div class="field"><label>Opens</label><input type="datetime-local" id="xOpen"></div>' +
         '<div class="field"><label>Closes</label><input type="datetime-local" id="xClose"></div></div>' +
         '<label class="check"><input type="checkbox" id="xShow"> Show students their score right after submitting <span class="faint">(otherwise hidden until you release it)</span></label>' +
+        exitsField('xExits', 3) +
         columnPicker(data.columns, 'x', { max: false }) + siblingChecks(data.siblings) +
         '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="xCreate">Create exam</button></div></div></details>';
     }
@@ -1760,7 +1904,8 @@ function manageExams(section) {
       var st = { upcoming: '<span class="badge grey">Upcoming</span>', open: '<span class="badge green">Open now</span>', closed: '<span class="badge">Closed</span>' }[e.state];
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
         (e.showScore === 'IMMEDIATE' ? '<span class="badge">score shown at once</span>' : (e.released ? '<span class="badge green">released</span>' : '<span class="badge gold">not released</span>')) +
-        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · column “' + esc(e.columnName) + '”</div>' +
+        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · column “' + esc(e.columnName) + '”' +
+        ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + '</div>' +
         '<div class="small" style="margin-top:3px">' + e.counts.submitted + ' / ' + e.counts.students + ' submitted · ' + (e.counts.started - e.counts.submitted) + ' in progress</div></div>' +
         '<div class="file-acts"><button class="btn sm primary" data-res="' + esc(e.id) + '">Results</button>' +
         '<button class="btn sm" data-xedit="' + esc(e.id) + '">Edit</button>' +
@@ -1790,7 +1935,7 @@ function manageExams(section) {
       var p = {
         title: $('#xTitle', M.body).value.trim(), blueprint: bp, duration: Number($('#xDur', M.body).value),
         opensAt: fromLocalInput($('#xOpen', M.body).value), closesAt: fromLocalInput($('#xClose', M.body).value),
-        showScore: $('#xShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED',
+        showScore: $('#xShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#xExits', M.body).value) || 0,
         column: readColumn(M.body, 'x'), alsoSectionIds: checkedSiblings(M.body)
       };
       if (!p.title) { toast('Give the exam a title.', 'error'); return; }
@@ -1818,6 +1963,7 @@ function manageExams(section) {
       '<div class="field"><label>Opens</label><input type="datetime-local" id="eOpen" value="' + esc(toLocalInput(e.opensAt)) + '"></div>' +
       '<div class="field"><label>Closes</label><input type="datetime-local" id="eClose" value="' + esc(toLocalInput(e.closesAt)) + '"></div></div>' +
       '<label class="check"><input type="checkbox" id="eShow"' + (e.showScore === 'IMMEDIATE' ? ' checked' : '') + '> Show students their score right after submitting</label>' +
+      exitsField('eExits', e.maxExits || 0) +
       '<p class="tiny faint">The questions can’t be changed after creating the exam. To use a different set, remove it and create a new one.</p>' +
       '<div class="row" style="margin-top:12px"><div class="spacer"></div><button class="btn primary" id="eSave">Save</button></div>';
     $('#xBack', M.body).addEventListener('click', function () { list(); });
@@ -1825,7 +1971,7 @@ function manageExams(section) {
       run('admin.exam.update', {
         id: e.id, title: $('#eTitle', M.body).value.trim(), duration: Number($('#eDur', M.body).value),
         opensAt: fromLocalInput($('#eOpen', M.body).value), closesAt: fromLocalInput($('#eClose', M.body).value),
-        showScore: $('#eShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED'
+        showScore: $('#eShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#eExits', M.body).value) || 0
       }, 'Saved.').then(list);
     });
   }
@@ -1838,7 +1984,8 @@ function manageExams(section) {
   function drawResults(r) {
     var e = r.exam, s = r.stats;
     var label = { not_started: '<span class="muted">not started</span>', in_progress: '<span class="badge gold">in progress</span>',
-      expired: '<span class="badge gold">time up</span>', submitted: '<span class="badge green">submitted</span>', auto: '<span class="badge">auto-submitted</span>' };
+      expired: '<span class="badge gold">time up</span>', submitted: '<span class="badge green">submitted</span>', auto: '<span class="badge">auto-submitted</span>',
+      locked: '<span class="badge red" title="Left the exam too many times; answers up to then were submitted. Reset lets the student start again.">🔒 locked</span>' };
     var html = '<button class="btn sm ghost" id="xBack">← All exams</button>' +
       '<div class="row wrap" style="margin:12px 0"><div><h3 style="margin:0">' + esc(e.title) + '</h3>' +
       '<div class="small muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + '</div></div><div class="spacer"></div>' +
@@ -1851,13 +1998,13 @@ function manageExams(section) {
       '<div class="stat"><div class="v">' + (s.high === null ? '—' : fmt(s.high, 0) + '%') + '</div><div class="k">Highest</div></div>' +
       '<div class="stat"><div class="v">' + (s.low === null ? '—' : fmt(s.low, 0) + '%') + '</div><div class="k">Lowest</div></div></div>' +
       (!e.released && e.showScore !== 'IMMEDIATE' ? '<p class="small muted">Students can’t see their scores yet. “Release scores” puts them in the gradebook column and shows them to students.</p>' : '') +
-      '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Status</th><th class="num">Score</th><th>Submitted</th><th class="num" title="Times the student left the exam page">Left page</th><th></th></tr></thead><tbody>' +
+      '<div class="table-wrap"><table><thead><tr><th>Student</th><th>Status</th><th class="num">Score</th><th>Submitted</th><th class="num" title="Times the student switched apps or tabs, or left full screen">Left exam</th><th></th></tr></thead><tbody>' +
       r.students.map(function (st) {
         return '<tr><td>' + esc(st.name) + '<div class="tiny muted">' + esc(st.studentId) + '</div></td>' +
           '<td>' + (label[st.status] || '') + (st.status === 'in_progress' ? ' <span class="tiny muted">until ' + esc(st.deadline) + '</span>' : '') + '</td>' +
           '<td class="num">' + (st.score === null ? '—' : '<b>' + st.score + '</b> / ' + st.items) + '</td>' +
           '<td class="small">' + esc(st.submittedAt || '') + '</td>' +
-          '<td class="num">' + (st.away ? '<span class="badge ' + (st.away >= 3 ? 'red' : 'gold') + '">' + st.away + '</span>' : (st.score === null ? '' : '0')) + '</td>' +
+          '<td class="num">' + (st.away ? '<span class="badge ' + (st.away >= (e.maxExits || 3) ? 'red' : 'gold') + '">' + st.away + '</span>' : (st.score === null ? '' : '0')) + '</td>' +
           '<td>' + (st.status !== 'not_started' ? '<button class="btn sm ghost" data-reset="' + esc(st.studentId) + '" title="Let this student take it again">Reset</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     if (r.analysis.length) {

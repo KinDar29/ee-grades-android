@@ -59,7 +59,7 @@ function tab_(name) {
     try { sh = createTab_(ss, name, SCHEMA[name] || []); }
     catch (err) { SpreadsheetApp.flush(); sh = ss.getSheetByName(name); if (!sh) throw err; }
   }
-  else if (!_schemaChecked[name] && (name === TAB.STUDENTS || name === TAB.SECTIONS)) ensureColumns_(sh, SCHEMA[name]);
+  else if (!_schemaChecked[name] && (name === TAB.STUDENTS || name === TAB.SECTIONS || name === 'Exams')) ensureColumns_(sh, SCHEMA[name]);
   _schemaChecked[name] = true;
   return sh;
 }
