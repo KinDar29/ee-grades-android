@@ -112,7 +112,74 @@ class Repository(
         )
     }
 
-    suspend fun signOut() = store.clearAll()
+    /* ----------------------------- registration ----------------------------- */
+
+    suspend fun registrationOptions(): RegistrationOptions {
+        val data = api.call("register.options")
+        return api.json.decodeFromJsonElement(RegistrationOptions.serializer(), data)
+    }
+
+    /** Registration step 1: checks the form and e-mails a code. Nothing is saved yet. */
+    suspend fun registrationStart(
+        studentId: String, email: String, lastName: String, firstName: String, middleName: String,
+        program: String, yearLevel: String, password: String, sectionIds: List<String>
+    ): EmailCodeSent {
+        val data = api.call(
+            action = "register.start",
+            payload = buildJsonObject {
+                put("studentId", studentId)
+                put("email", email)
+                put("lastName", lastName)
+                put("firstName", firstName)
+                put("middleName", middleName)
+                put("program", program)
+                put("yearLevel", yearLevel)
+                put("password", password)
+                put("sectionIds", kotlinx.serialization.json.JsonArray(sectionIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            }
+        )
+        return api.json.decodeFromJsonElement(EmailCodeSent.serializer(), data)
+    }
+
+    /** Registration step 2: the code creates the account and enrols the student. */
+    suspend fun registrationVerify(studentId: String, code: String): RegistrationDone {
+        val data = api.call(
+            action = "register.verify",
+            payload = buildJsonObject {
+                put("studentId", studentId)
+                put("code", code)
+            }
+        )
+        return api.json.decodeFromJsonElement(RegistrationDone.serializer(), data)
+    }
+
+    /** Confirm-e-mail step 1: e-mail a 6-digit code to [email]. */
+    suspend fun sendEmailCode(email: String): EmailCodeSent {
+        val data = api.call(
+            action = "account.email.send",
+            payload = buildJsonObject { put("email", email) },
+            token = requireToken()
+        )
+        return api.json.decodeFromJsonElement(EmailCodeSent.serializer(), data)
+    }
+
+    /** Confirm-e-mail step 2: the code from the e-mail. Returns the updated profile. */
+    suspend fun verifyEmailCode(code: String): Profile {
+        val data = api.call(
+            action = "account.email.verify",
+            payload = buildJsonObject { put("code", code) },
+            token = requireToken()
+        )
+        val result = api.json.decodeFromJsonElement(EmailVerified.serializer(), data)
+        SessionSignals.emailNeeded.value = false
+        saveProfile(result.profile)
+        return result.profile
+    }
+
+    suspend fun signOut() {
+        SessionSignals.emailNeeded.value = false
+        store.clearAll()
+    }
 
     /* -------------------------------- student ------------------------------- */
 
@@ -143,10 +210,13 @@ class Repository(
     }
 
     /**
-     * Downloads a course file (Syllabus / TOS) into [dir] and returns it.
+     * Downloads a course file into [cacheDir] and returns it. Problem sets
+     * (downloadable) go to course-files/, which the FileProvider shares with
+     * the phone's PDF viewer. Everything else goes to view-only/, which no
+     * other app can reach, and is shown by the in-app viewer.
      * Files are not cached between visits: the admin may replace them.
      */
-    suspend fun downloadCourseFile(sectionId: String, kind: String, dir: java.io.File): java.io.File {
+    suspend fun downloadCourseFile(sectionId: String, kind: String, cacheDir: java.io.File): DownloadedFile {
         val data = api.call(
             action = "student.file",
             payload = buildJsonObject {
@@ -158,10 +228,12 @@ class Repository(
         val file = api.json.decodeFromJsonElement(CourseFileData.serializer(), data)
         val bytes = java.util.Base64.getDecoder().decode(file.data)
         return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dir = java.io.File(cacheDir, if (file.downloadable) "course-files" else "view-only")
             dir.mkdirs()
             dir.listFiles()?.forEach { it.delete() }   // keep only the latest one
             val safe = file.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").ifBlank { "${file.kind}.pdf" }
-            java.io.File(dir, if (safe.endsWith(".pdf", true)) safe else "$safe.pdf").apply { writeBytes(bytes) }
+            val out = java.io.File(dir, if (safe.endsWith(".pdf", true)) safe else "$safe.pdf").apply { writeBytes(bytes) }
+            DownloadedFile(out, file.downloadable)
         }
     }
 

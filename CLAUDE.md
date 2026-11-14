@@ -59,8 +59,8 @@ change log at the bottom for every change you ship.
   `REQUIRE_EMAIL_VERIFY`, blank = on) until `account.email.send` /
   `account.email.verify`; login/session return `mustVerifyEmail`. Limits: 5
   codes/hour per number and per address, 150/hour portal-wide, 5 wrong tries.
-  The Android app does not handle `MUST_EMAIL` yet — students must verify in
-  the portal once before the app works.
+  The Android app shows its own confirm-e-mail screen from app 1.2.0 (see
+  Android app notes).
   Exam save / submit / image skip the gate (`requireSession_` 4th argument
   `skipEmailCheck`) and the page never pops the e-mail screen over a running
   exam, so turning the gate on mid-exam can't lock anyone out of an attempt.
@@ -226,8 +226,20 @@ Rules that matter:
   Failed. The admin area in the app stays read-only (no editing, exports,
   Summary of Grades or indirect dashboard — those are portal-only).
 - Class page shows "Course files" (from `student.class` `files`); View downloads
-  through `student.file` into `cacheDir/course-files/` and opens the phone's
-  PDF viewer via the FileProvider `${applicationId}.files`.
+  through `student.file`. Problem sets (`downloadable: true`) go to
+  `cacheDir/course-files/` and open in the phone's PDF viewer via the
+  FileProvider `${applicationId}.files`. Everything else goes to
+  `cacheDir/view-only/` (not shared) and opens in `ui/ViewOnlyPdf.kt`:
+  PdfRenderer pages in a full-screen dialog with `SecureFlagPolicy.SecureOn`
+  (no screenshots / screen recording), file deleted on close.
+- Registration: "Create your account" on the sign-in screen (students, when
+  `portal` says `registrationOpen`) → `ui/RegisterScreen.kt` (same form as the
+  portal: `register.options` / `register.start` / `register.verify`), then
+  signs in with the new password.
+- E-mail gate: `ApiClient` reads `mustVerifyEmail` from any error and sets
+  `SessionSignals.emailNeeded`; `AppViewModel` then switches to
+  `AuthPhase.MustVerifyEmail` → `ConfirmEmailScreen` (`account.email.send` /
+  `account.email.verify`), after the password step if both are due.
 
 ## Releasing the Android app
 
@@ -367,7 +379,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   anything that sends mail, check the owner has approved the mail scope.**
 - **2026-11-14 10:04** — Fixed: the owner ran `checkEmailSending()` (new
   `MailCheck.js`) and approved "Send email as you" (it had been unticked);
-  quota 1500/day. Both switches back to TRUE.
+  quota 1500/day. `REGISTRATION_OPEN` back to TRUE.
 - **2026-11-14 10:10** — Unit Exam No. 8 is open until 2026-11-16 01:00, so
   `REQUIRE_EMAIL_VERIFY` stays FALSE (registration on) until version 23:
   running exams are exempt from the e-mail gate.
@@ -375,4 +387,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   from the e-mail gate (exam save/submit/image skip it; the page never shows
   the e-mail screen over an exam); `MailCheck.js`. `REQUIRE_EMAIL_VERIFY`
   turned back to TRUE right after.
+- **2026-11-14** — App 1.2.0: confirm-e-mail screen for the portal's e-mail
+  gate; view-only course files open in an in-app viewer with screenshots
+  blocked (problem sets still open in the phone's PDF viewer); new-student
+  registration screen, same steps as the portal.
+- **2026-11-14 11:45** — Signing key created on the owner's laptop
+  (Documents\EE-Grades-Key, alias `ee-grades`, RSA 4096, PKCS12, ~27 years);
+  the owner added the three secrets. Merging this releases **v1.2.0**.
 

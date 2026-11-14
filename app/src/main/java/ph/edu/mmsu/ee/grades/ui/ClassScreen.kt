@@ -41,6 +41,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +68,12 @@ fun ClassScreen(
 
     LaunchedEffect(sectionId) { vm.start(sectionId) }
     LaunchedEffect(vm.authLost) { vm.authLost?.let(onAuthLost) }
+
+    // A view-only course file (module, syllabus, TOS…) open in the in-app viewer.
+    var viewing by remember { mutableStateOf<Pair<File, String>?>(null) }
+    viewing?.let { (file, label) ->
+        ViewOnlyPdf(file = file, title = label, onClose = { viewing = null })
+    }
 
     val data = vm.data
     val title = data?.section?.run { subjectCode.ifBlank { name } }?.ifBlank { "Class" } ?: "Class"
@@ -128,8 +138,11 @@ fun ClassScreen(
                                 onOpen = { kind ->
                                     vm.openFile(
                                         kind = kind,
-                                        dir = File(context.cacheDir, "course-files"),
-                                        onReady = { file -> openPdf(context, file) },
+                                        cacheDir = context.cacheDir,
+                                        onReady = { got ->
+                                            if (got.downloadable) openPdf(context, got.file)
+                                            else viewing = got.file to (data.files.firstOrNull { it.kind == kind }?.label ?: got.file.name)
+                                        },
                                         onError = { msg -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
                                     )
                                 }

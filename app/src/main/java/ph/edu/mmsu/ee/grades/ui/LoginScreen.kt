@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,6 +60,15 @@ fun LoginScreen(
     val portal = vm.portal
     val isAdmin = vm.role == "admin"
     var forgotOpen by rememberSaveable { mutableStateOf(false) }
+    var registerOpen by rememberSaveable { mutableStateOf(false) }
+
+    if (registerOpen) {
+        RegisterScreen(
+            onSignedIn = { registerOpen = false; onSignedIn(it) },
+            onCancel = { registerOpen = false }
+        )
+        return
+    }
 
     if (forgotOpen) {
         ForgotPasswordScreen(
@@ -222,6 +232,22 @@ fun LoginScreen(
             modifier = Modifier.padding(top = 4.dp)
         ) {
             Text("Forgot password?")
+        }
+
+        if (!isAdmin && portal?.registrationOpen == true) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "New student?",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = { registerOpen = true },
+                enabled = !vm.busy,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            ) {
+                Text("Create your account")
+            }
         }
 
         val announcement = portal?.announcement.orEmpty()
