@@ -627,5 +627,6 @@ fun AdminToolsRow(onTool: (String) -> Unit) {
         OutlinedButton(onClick = { onTool("materials") }) { Text("📄 Materials") }
         OutlinedButton(onClick = { onTool("requirements") }) { Text("📋 Requirements") }
         OutlinedButton(onClick = { onTool("enrolment") }) { Text("👤 Enrolment") }
+        OutlinedButton(onClick = { onTool("record") }) { Text("📑 Class record") }
     }
 }

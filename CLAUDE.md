@@ -237,8 +237,13 @@ Rules that matter:
   add, edit, import, reset password, delete), 🗂 Semesters & classes
   (semesters, subjects, classes, archive), ⚙ Portal settings. The app never
   deletes student work: requirements with scores, exams someone started and
-  problem sets with submissions can only be removed on the portal. Exports,
-  Summary of Grades and the dashboards are still portal-only.
+  problem sets with submissions can only be removed on the portal.
+  Reports (`ui/AdminReports.kt`): 📑 Class record on the class page
+  (`admin.export.pdf` → PDF + Summary of Grades .docx written to
+  `cacheDir/course-files/`, opened through the FileProvider) and 📊 Dashboards
+  on the home page (`admin.direct` / `admin.indirect`, ↻ = `.refresh`; section
+  chips; Compose bars, no chart library). Still portal-only: grade scale,
+  delete graded files, replacing/reordering materials, the Indirect PDF.
 - Class page shows "Course files" (from `student.class` `files`); View downloads
   through `student.file`. Problem sets (`downloadable: true`) go to
   `cacheDir/course-files/` and open in the phone's PDF viewer via the
@@ -431,3 +436,5 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14** — App (1.3.0, not released yet): admin management —
   students, semesters / subjects / classes, portal settings, requirements,
   enrolment and final status, new exams and problem sets.
+- **2026-11-14** — App (1.3.0, not released yet): class record PDF + Summary of
+  Grades and the Direct / Indirect dashboards in the admin app.

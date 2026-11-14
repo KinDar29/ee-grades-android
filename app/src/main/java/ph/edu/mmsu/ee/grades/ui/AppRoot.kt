@@ -140,6 +140,7 @@ private fun SignedInNav(app: AppViewModel) {
             when (entry.arguments?.getString("what")) {
                 "students" -> AdminStudentsScreen(back, onAuthLost)
                 "catalog" -> AdminCatalogScreen(back, onAuthLost)
+                "dashboards" -> AdminDashboardsScreen(back, onAuthLost)
                 else -> AdminPortalSettingsScreen(back, onAuthLost)
             }
         }
@@ -159,6 +160,7 @@ private fun SignedInNav(app: AppViewModel) {
                 "exams" -> AdminExamsScreen(sid, back, onAuthLost)
                 "requirements" -> AdminRequirementsScreen(sid, back, onAuthLost)
                 "enrolment" -> AdminEnrolmentScreen(sid, back, onAuthLost)
+                "record" -> AdminClassRecordScreen(sid, back, onAuthLost)
                 else -> AdminMaterialsScreen(sid, back, onAuthLost)
             }
         }

@@ -222,6 +222,7 @@ fun AdminManageRow(onManage: (String) -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton(onClick = { onManage("students") }) { Text("👥 Students") }
         OutlinedButton(onClick = { onManage("catalog") }) { Text("🗂 Semesters & classes") }
+        OutlinedButton(onClick = { onManage("dashboards") }) { Text("📊 Dashboards") }
         OutlinedButton(onClick = { onManage("settings") }) { Text("⚙ Portal settings") }
     }
 }
