@@ -237,6 +237,127 @@ class Repository(
         }
     }
 
+    /* ----------------------------- problem sets ----------------------------- */
+
+    /** Uploads a PDF answer; replaces the previous one until the due time. */
+    suspend fun submitProblemSet(sectionId: String, assignmentId: String, name: String, bytes: ByteArray): SubmitResult {
+        val data = api.call(
+            action = "student.assignment.submit",
+            payload = buildJsonObject {
+                put("sectionId", sectionId)
+                put("assignmentId", assignmentId)
+                put("name", name)
+                put("mimeType", "application/pdf")
+                put("data", java.util.Base64.getEncoder().encodeToString(bytes))
+            },
+            token = requireToken()
+        )
+        return api.json.decodeFromJsonElement(SubmitResult.serializer(), data)
+    }
+
+    /** The student's own uploaded answer, saved to cacheDir/course-files/ (their own work, shareable). */
+    suspend fun downloadMySubmission(sectionId: String, assignmentId: String, cacheDir: java.io.File): DownloadedFile {
+        val data = api.call(
+            action = "student.submission",
+            payload = buildJsonObject {
+                put("sectionId", sectionId)
+                put("assignmentId", assignmentId)
+            },
+            token = requireToken()
+        )
+        val file = api.json.decodeFromJsonElement(CourseFileData.serializer(), data)
+        val bytes = java.util.Base64.getDecoder().decode(file.data)
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dir = java.io.File(cacheDir, "course-files")
+            dir.mkdirs()
+            dir.listFiles()?.forEach { it.delete() }
+            val safe = file.name.replace(Regex("[^A-Za-z0-9._ -]"), "_").ifBlank { "answer.pdf" }
+            val out = java.io.File(dir, if (safe.endsWith(".pdf", true)) safe else "$safe.pdf").apply { writeBytes(bytes) }
+            DownloadedFile(out, true)
+        }
+    }
+
+    /* --------------------------------- exams -------------------------------- */
+
+    suspend fun startExam(sectionId: String, examId: String): ExamAttempt {
+        val data = api.call(
+            action = "student.exam.start",
+            payload = buildJsonObject {
+                put("sectionId", sectionId)
+                put("examId", examId)
+            },
+            token = requireToken()
+        )
+        return api.json.decodeFromJsonElement(ExamAttempt.serializer(), data)
+    }
+
+    private fun answersJson(answers: List<Int?>) = kotlinx.serialization.json.JsonArray(
+        answers.map { if (it == null) kotlinx.serialization.json.JsonNull else kotlinx.serialization.json.JsonPrimitive(it) }
+    )
+
+    /** Autosave (server cache only). The reply may say the attempt was locked or is over. */
+    suspend fun saveExam(attemptId: String, answers: List<Int?>, away: Int): ExamReply {
+        val data = api.call(
+            action = "student.exam.save",
+            payload = buildJsonObject {
+                put("attemptId", attemptId)
+                put("answers", answersJson(answers))
+                put("away", away)
+            },
+            token = requireToken()
+        )
+        return api.json.decodeFromJsonElement(ExamReply.serializer(), data)
+    }
+
+    suspend fun submitExam(attemptId: String, answers: List<Int?>, away: Int): ExamReply {
+        val data = api.call(
+            action = "student.exam.submit",
+            payload = buildJsonObject {
+                put("attemptId", attemptId)
+                put("answers", answersJson(answers))
+                put("away", away)
+            },
+            token = requireToken()
+        )
+        return api.json.decodeFromJsonElement(ExamReply.serializer(), data)
+    }
+
+    suspend fun examImage(attemptId: String, n: Int): ByteArray {
+        val data = api.call(
+            action = "student.exam.image",
+            payload = buildJsonObject {
+                put("attemptId", attemptId)
+                put("n", n)
+            },
+            token = requireToken()
+        )
+        val img = api.json.decodeFromJsonElement(ExamImage.serializer(), data)
+        return java.util.Base64.getDecoder().decode(img.data)
+    }
+
+    /** Answers + exit count kept on the phone too, so a crash or dead battery loses nothing. */
+    suspend fun saveExamLocal(attemptId: String, answers: List<Int?>, away: Int) {
+        val obj = buildJsonObject {
+            put("a", answersJson(answers))
+            put("away", away)
+        }
+        store.putCache("exam:$attemptId", obj.toString())
+    }
+
+    suspend fun loadExamLocal(attemptId: String): Pair<List<Int?>, Int>? {
+        val raw = store.getCache("exam:$attemptId")?.second ?: return null
+        return try {
+            val o = api.json.parseToJsonElement(raw) as kotlinx.serialization.json.JsonObject
+            val a = (o["a"] as kotlinx.serialization.json.JsonArray).map {
+                (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull()
+            }
+            val away = (o["away"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toIntOrNull() ?: 0
+            a to away
+        } catch (e: Exception) { null }
+    }
+
+    suspend fun clearExamLocal(attemptId: String) = store.putCache("exam:$attemptId", "")
+
     /* ------------------------------ new scores ------------------------------ */
     /*  The phone remembers every score it has already told the student about
         ("<sectionId>|<assessmentId>" -> score). The first check after sign-in

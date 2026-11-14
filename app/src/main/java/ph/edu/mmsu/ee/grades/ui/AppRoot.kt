@@ -23,6 +23,7 @@ private object Route {
     const val CHANGE_PASSWORD = "change-password"
     const val CLASS = "class"
     const val SECTION = "section"
+    const val EXAM = "exam"
 }
 
 /**
@@ -92,10 +93,27 @@ private fun SignedInNav(app: AppViewModel) {
             route = "${Route.CLASS}/{sectionId}",
             arguments = listOf(navArgument("sectionId") { type = NavType.StringType })
         ) { entry ->
+            val sid = entry.arguments?.getString("sectionId").orEmpty()
             ClassScreen(
-                sectionId = entry.arguments?.getString("sectionId").orEmpty(),
+                sectionId = sid,
                 onBack = { nav.popBackStack() },
-                onAuthLost = onAuthLost
+                onAuthLost = onAuthLost,
+                onOpenExam = { exam -> nav.navigate("${Route.EXAM}/$sid/${exam.id}") }
+            )
+        }
+
+        composable(
+            route = "${Route.EXAM}/{sectionId}/{examId}",
+            arguments = listOf(
+                navArgument("sectionId") { type = NavType.StringType },
+                navArgument("examId") { type = NavType.StringType }
+            )
+        ) { entry ->
+            ExamScreen(
+                sectionId = entry.arguments?.getString("sectionId").orEmpty(),
+                examId = entry.arguments?.getString("examId").orEmpty(),
+                profile = profile,
+                onDone = { nav.popBackStack() }
             )
         }
 

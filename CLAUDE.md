@@ -171,8 +171,8 @@ change log at the bottom for every change you ship.
   print blocked, name + ID watermark (`S.profile`). Exam column `Max Exits`
   (0 = never; added by `ensureColumns_`): the server locks on autosave or
   submit once exits ≥ it — result `How` = `LOCKED` with the answers so far;
-  exits only go up. Reset lets the student start over. Web portal only — the Android app doesn't show
-  assignments or exams yet.
+  exits only go up. Reset lets the student start over. The Android app takes
+  exams and problem sets too (see Android app notes).
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -236,6 +236,20 @@ Rules that matter:
   `portal` says `registrationOpen`) → `ui/RegisterScreen.kt` (same form as the
   portal: `register.options` / `register.start` / `register.verify`), then
   signs in with the new password.
+- Problem sets (`ui/LmsCards.kt` `ProblemSetsCard`): open the problem-set
+  PDF (`student.file` with the Material ID), pick a PDF with the system
+  picker (`OpenDocument`, checked ≤ 10 MB and `%PDF` on the phone) →
+  `student.assignment.submit` (base64), "My file" → `student.submission`.
+- Exams (`ui/ExamScreen.kt` + `ExamViewModel.kt`, route `exam/{sectionId}/{examId}`):
+  `student.exam.start` / `save` (every 15 s when changed, and on each exit)
+  / `submit` / `image`; answers also kept on the phone (`exam:<attemptId>`
+  in the Store cache) so a crash loses nothing; server clock offset for the
+  timer; auto-submit at 0. Guard: `FLAG_SECURE` + keep-screen-on,
+  `startLockTask()` (screen pinning), and one exit per trip away for ON_STOP
+  while the screen is on, multi-window / picture-in-picture, unpinning, or the
+  window losing focus > 3 s (8 s grace at start for the pin prompt). Exits
+  are sent as `away` and the server locks at the exam's limit — same rules
+  as the portal. Back button is blocked; name + ID watermark.
 - E-mail gate: `ApiClient` reads `mustVerifyEmail` from any error and sets
   `SessionSignals.emailNeeded`; `AppViewModel` then switches to
   `AuthPhase.MustVerifyEmail` → `ConfirmEmailScreen` (`account.email.send` /
@@ -394,4 +408,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14 11:45** — Signing key created on the owner's laptop
   (Documents\EE-Grades-Key, alias `ee-grades`, RSA 4096, PKCS12, ~27 years);
   the owner added the three secrets. Merging this releases **v1.2.0**.
+- **2026-11-14** — App (1.3.0, not released yet): students take exams and
+  submit problem sets in the app (screenshots blocked, screen pinning,
+  split-screen / app-switch exits counted).
 
