@@ -94,7 +94,7 @@ function parseToken_(token) {
  * Turn a token into a live session object, or throw.
  * Also re-checks that the account still exists and is active.
  */
-function requireSession_(token, requiredRole, allowPendingChange) {
+function requireSession_(token, requiredRole, allowPendingChange, skipEmailCheck) {
   var claims = parseToken_(token);
   if (!claims) throw new Error('AUTH:Your session has expired. Please sign in again.');
 
@@ -125,7 +125,8 @@ function requireSession_(token, requiredRole, allowPendingChange) {
   }
 
   // Students confirm an e-mail address once before using the portal.
-  if (!allowPendingChange && claims.r === 'student' && needsEmail_(account)) {
+  // (an exam already running is never interrupted: its save/submit skip this)
+  if (!allowPendingChange && !skipEmailCheck && claims.r === 'student' && needsEmail_(account)) {
     throw new Error('MUST_EMAIL:Please confirm your e-mail address before continuing.');
   }
 

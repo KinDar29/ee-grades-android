@@ -61,6 +61,9 @@ change log at the bottom for every change you ship.
   codes/hour per number and per address, 150/hour portal-wide, 5 wrong tries.
   The Android app does not handle `MUST_EMAIL` yet — students must verify in
   the portal once before the app works.
+  Exam save / submit / image skip the gate (`requireSession_` 4th argument
+  `skipEmailCheck`) and the page never pops the e-mail screen over a running
+  exam, so turning the gate on mid-exam can't lock anyone out of an attempt.
 - `Sections.js` — per-section spreadsheets (Info / Grades / Assessments /
   Summary), assessment syncing, grade computation (`computeGrade_`).
 - New-score notifications: `student.updates` (`studentUpdates_` in `Api.js`)
@@ -365,4 +368,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14 10:04** — Fixed: the owner ran `checkEmailSending()` (new
   `MailCheck.js`) and approved "Send email as you" (it had been unticked);
   quota 1500/day. Both switches back to TRUE.
+- **2026-11-14 10:10** — Unit Exam No. 8 is open until 2026-11-16 01:00, so
+  `REQUIRE_EMAIL_VERIFY` stays FALSE (registration on) until version 23:
+  running exams are exempt from the e-mail gate.
 

@@ -28,7 +28,7 @@ function call(action, payload) {
         if (parsed.ok) { resolve(parsed.data); return; }
         if (parsed.authRequired) { forceSignOut(parsed.error); }
         if (parsed.mustChangePassword && !document.querySelector('#pwSave')) { promptPasswordChange(true); }
-        else if (parsed.mustVerifyEmail && !document.querySelector('#evBox')) { S.needEmail = true; promptEmailVerify(); }
+        else if (parsed.mustVerifyEmail && !document.querySelector('#evBox') && !EXAM) { S.needEmail = true; promptEmailVerify(); }
         reject(new Error(parsed.error || 'Something went wrong.'));
       })
       .withFailureHandler(function (err) {
