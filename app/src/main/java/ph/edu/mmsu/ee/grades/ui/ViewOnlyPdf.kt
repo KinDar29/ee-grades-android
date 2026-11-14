@@ -180,3 +180,27 @@ private fun PdfPage(doc: OpenPdf, index: Int, widthPx: Int, lock: Mutex) {
         }
     }
 }
+
+/** The pages of a PDF in a scrolling list (no dialog), for the grading screen. Deletes the file when it leaves. */
+@Composable
+fun PdfPages(file: File, modifier: Modifier = Modifier) {
+    val doc = remember(file) { openPdf(file) }
+    val lock = remember { Mutex() }
+    DisposableEffect(file) {
+        onDispose {
+            try { doc?.renderer?.close() } catch (_: Exception) { }
+            try { doc?.fd?.close() } catch (_: Exception) { }
+            file.delete()
+        }
+    }
+    if (doc == null) {
+        Text("This file can't be shown.", modifier = modifier.padding(16.dp))
+        return
+    }
+    BoxWithConstraints(modifier.background(MaterialTheme.colorScheme.surfaceVariant)) {
+        val widthPx = with(LocalDensity.current) { maxWidth.toPx() }.toInt().coerceIn(600, 1600)
+        LazyColumn(contentPadding = PaddingValues(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(doc.pages) { index -> PdfPage(doc, index, widthPx, lock) }
+        }
+    }
+}

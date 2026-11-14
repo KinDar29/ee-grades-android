@@ -23,6 +23,8 @@ private object Route {
     const val CHANGE_PASSWORD = "change-password"
     const val CLASS = "class"
     const val SECTION = "section"
+    const val EXAM = "exam"
+    const val TOOL = "tool"
 }
 
 /**
@@ -92,10 +94,27 @@ private fun SignedInNav(app: AppViewModel) {
             route = "${Route.CLASS}/{sectionId}",
             arguments = listOf(navArgument("sectionId") { type = NavType.StringType })
         ) { entry ->
+            val sid = entry.arguments?.getString("sectionId").orEmpty()
             ClassScreen(
-                sectionId = entry.arguments?.getString("sectionId").orEmpty(),
+                sectionId = sid,
                 onBack = { nav.popBackStack() },
-                onAuthLost = onAuthLost
+                onAuthLost = onAuthLost,
+                onOpenExam = { exam -> nav.navigate("${Route.EXAM}/$sid/${exam.id}") }
+            )
+        }
+
+        composable(
+            route = "${Route.EXAM}/{sectionId}/{examId}",
+            arguments = listOf(
+                navArgument("sectionId") { type = NavType.StringType },
+                navArgument("examId") { type = NavType.StringType }
+            )
+        ) { entry ->
+            ExamScreen(
+                sectionId = entry.arguments?.getString("sectionId").orEmpty(),
+                examId = entry.arguments?.getString("examId").orEmpty(),
+                profile = profile,
+                onDone = { nav.popBackStack() }
             )
         }
 
@@ -103,11 +122,30 @@ private fun SignedInNav(app: AppViewModel) {
             route = "${Route.SECTION}/{sectionId}",
             arguments = listOf(navArgument("sectionId") { type = NavType.StringType })
         ) { entry ->
+            val sid = entry.arguments?.getString("sectionId").orEmpty()
             AdminSectionScreen(
-                sectionId = entry.arguments?.getString("sectionId").orEmpty(),
+                sectionId = sid,
                 onBack = { nav.popBackStack() },
-                onAuthLost = onAuthLost
+                onAuthLost = onAuthLost,
+                onTool = { tool -> nav.navigate("${Route.TOOL}/$tool/$sid") }
             )
+        }
+
+        composable(
+            route = "${Route.TOOL}/{tool}/{sectionId}",
+            arguments = listOf(
+                navArgument("tool") { type = NavType.StringType },
+                navArgument("sectionId") { type = NavType.StringType }
+            )
+        ) { entry ->
+            val sid = entry.arguments?.getString("sectionId").orEmpty()
+            val back = { nav.popBackStack(); Unit }
+            when (entry.arguments?.getString("tool")) {
+                "scores" -> AdminScoresScreen(sid, back, onAuthLost)
+                "problemsets" -> AdminProblemSetsScreen(sid, back, onAuthLost)
+                "exams" -> AdminExamsScreen(sid, back, onAuthLost)
+                else -> AdminMaterialsScreen(sid, back, onAuthLost)
+            }
         }
 
         composable(Route.SETTINGS) {

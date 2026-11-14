@@ -6,6 +6,8 @@ import androidx.compose.material3.TextButton
 import java.io.File
 import androidx.core.content.FileProvider
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.content.ActivityNotFoundException
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ph.edu.mmsu.ee.grades.data.ClassItem
 import ph.edu.mmsu.ee.grades.data.CourseFile
+import ph.edu.mmsu.ee.grades.data.ExamInfo
 import ph.edu.mmsu.ee.grades.data.Grade
 import ph.edu.mmsu.ee.grades.data.StudentClass
 import ph.edu.mmsu.ee.grades.data.Survey
@@ -61,13 +64,51 @@ import ph.edu.mmsu.ee.grades.data.Survey
 fun ClassScreen(
     sectionId: String,
     onBack: () -> Unit,
-    onAuthLost: (String?) -> Unit
+    onAuthLost: (String?) -> Unit,
+    onOpenExam: (ExamInfo) -> Unit = {}
 ) {
     val vm: ClassViewModel = viewModel()
     val context = LocalContext.current
 
     LaunchedEffect(sectionId) { vm.start(sectionId) }
+    // Coming back from an exam: show the new state and score.
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    androidx.compose.runtime.DisposableEffect(lifecycle) {
+        var first = true
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                if (first) first = false else vm.refresh()
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
     LaunchedEffect(vm.authLost) { vm.authLost?.let(onAuthLost) }
+
+    // Problem set waiting for the student to pick a PDF.
+    var pickingFor by remember { mutableStateOf<String?>(null) }
+    val pickPdf = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val target = pickingFor
+        pickingFor = null
+        if (uri != null && target != null) {
+            vm.uploadProblemSet(
+                assignmentId = target,
+                uri = uri,
+                resolver = context.contentResolver,
+                onDone = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() },
+                onError = { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            )
+        }
+    }
+    // Exam the student tapped "Start" on, waiting for the rules dialog.
+    var confirmExam by remember { mutableStateOf<ExamInfo?>(null) }
+    confirmExam?.let { exam ->
+        ExamRulesDialog(
+            exam = exam,
+            onStart = { confirmExam = null; onOpenExam(exam) },
+            onCancel = { confirmExam = null }
+        )
+    }
 
     // A view-only course file (module, syllabus, TOS…) open in the in-app viewer.
     var viewing by remember { mutableStateOf<Pair<File, String>?>(null) }
@@ -143,6 +184,48 @@ fun ClassScreen(
                                             if (got.downloadable) openPdf(context, got.file)
                                             else viewing = got.file to (data.files.firstOrNull { it.kind == kind }?.label ?: got.file.name)
                                         },
+                                        onError = { msg -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
+                                    )
+                                }
+                            )
+                        }
+                    }
+
+                    if (data.exams.isNotEmpty()) {
+                        item {
+                            ExamsCard(
+                                exams = data.exams,
+                                onStart = { confirmExam = it }
+                            )
+                        }
+                    }
+
+                    if (data.assignments.isNotEmpty()) {
+                        item {
+                            ProblemSetsCard(
+                                sets = data.assignments,
+                                busyId = vm.uploading,
+                                opening = vm.openingFile,
+                                onViewSet = { ps ->
+                                    vm.openFile(
+                                        kind = ps.materialId,
+                                        cacheDir = context.cacheDir,
+                                        onReady = { got ->
+                                            if (got.downloadable) openPdf(context, got.file)
+                                            else viewing = got.file to ps.title
+                                        },
+                                        onError = { msg -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
+                                    )
+                                },
+                                onUpload = { ps ->
+                                    pickingFor = ps.id
+                                    pickPdf.launch(arrayOf("application/pdf"))
+                                },
+                                onViewMine = { ps ->
+                                    vm.openMySubmission(
+                                        assignmentId = ps.id,
+                                        cacheDir = context.cacheDir,
+                                        onReady = { got -> openPdf(context, got.file) },
                                         onError = { msg -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
                                     )
                                 }

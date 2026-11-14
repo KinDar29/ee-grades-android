@@ -265,7 +265,121 @@ data class StudentClass(
     /** Course-outcome self-assessment survey, or null when the class has none. */
     val survey: Survey? = null,
     /** Syllabus / TOS PDFs the admin made visible (portal `courseFilesFor_`). */
-    val files: List<CourseFile> = emptyList()
+    val files: List<CourseFile> = emptyList(),
+    /** Open problem sets (portal `studentAssignments_`). */
+    val assignments: List<ProblemSet> = emptyList(),
+    /** The class's exams with this student's state (portal `studentExams_`). */
+    val exams: List<ExamInfo> = emptyList()
+)
+
+/* ------------------------------ problem sets ------------------------------ */
+
+@Serializable
+data class ProblemSet(
+    val id: String = "",
+    val title: String = "",
+    val instructions: String = "",
+    /** Material ID of the problem-set PDF, or blank. Opened through `student.file`. */
+    val materialId: String = "",
+    /** 'yyyy-MM-dd HH:mm', Manila time. */
+    val dueAt: String = "",
+    val allowLate: Boolean = false,
+    val pastDue: Boolean = false,
+    val canSubmit: Boolean = true,
+    val submission: Submission? = null,
+    val score: Double? = null,
+    val max: Double? = null
+)
+
+@Serializable
+data class Submission(
+    val id: String = "",
+    val fileName: String = "",
+    val size: Long = 0,
+    val submittedAt: String = "",
+    val late: Boolean = false,
+    val fileDeleted: Boolean = false
+)
+
+/** `student.assignment.submit` reply. */
+@Serializable
+data class SubmitResult(
+    val submittedAt: String = "",
+    val late: Boolean = false,
+    val fileName: String = "",
+    val size: Long = 0,
+    val replaced: Boolean = false
+)
+
+/* ---------------------------------- exams --------------------------------- */
+
+@Serializable
+data class ExamInfo(
+    val id: String = "",
+    val title: String = "",
+    val items: Int = 0,
+    val duration: Int = 0,
+    val opensAt: String = "",
+    val closesAt: String = "",
+    /** upcoming | open | in_progress | submitted | missed */
+    val state: String = "",
+    val maxExits: Int = 0,
+    val locked: Boolean = false,
+    val score: Double? = null,
+    val scoreItems: Int? = null
+)
+
+/**
+ * `student.exam.start` reply: either the attempt (questions, deadline, saved
+ * answers) or done = true with a message (already submitted / time over / locked).
+ */
+@Serializable
+data class ExamAttempt(
+    val done: Boolean = false,
+    val locked: Boolean = false,
+    val message: String = "",
+    val attemptId: String = "",
+    val title: String = "",
+    val items: Int = 0,
+    /** Server clock, epoch ms. */
+    val deadline: Long = 0,
+    val serverNow: Long = 0,
+    val questions: List<ExamQuestion> = emptyList(),
+    /** Chosen option per question (index into that question's shown choices), null = none. */
+    val answers: List<Int?> = emptyList(),
+    val away: Int = 0,
+    val maxExits: Int = 0
+)
+
+@Serializable
+data class ExamQuestion(
+    val n: Int = 0,
+    val text: String = "",
+    val choices: List<String> = emptyList(),
+    val image: Boolean = false
+)
+
+/** `student.exam.save` / `student.exam.submit` reply. */
+@Serializable
+data class ExamReply(
+    val saved: Boolean = false,
+    val done: Boolean = false,
+    val locked: Boolean = false,
+    val late: Boolean = false,
+    val message: String = "",
+    val serverNow: Long = 0,
+    val away: Int = 0,
+    val submittedAt: String = "",
+    val items: Int = 0,
+    val score: Double? = null,
+    val showScore: Boolean = false
+)
+
+/** `student.exam.image` reply. */
+@Serializable
+data class ExamImage(
+    val mimeType: String = "",
+    val data: String = ""
 )
 
 @Serializable
@@ -339,7 +453,9 @@ data class RosterEntry(
     val firstName: String = "",
     val grade: Grade = Grade(),
     /** PASSED, CONDITIONAL, FAILED, INC, DROPPED or NONE (portal `standingOf_`). */
-    val standing: String = ""
+    val standing: String = "",
+    /** Assessment ID → raw score (number, or "" when blank). Used by score editing. */
+    val scores: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap()
 ) {
     val displayName: String
         get() = listOf(lastName, firstName)

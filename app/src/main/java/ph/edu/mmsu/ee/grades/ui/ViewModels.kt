@@ -659,6 +659,85 @@ class ClassViewModel : ViewModel() {
         }
     }
 
+    /** Problem set being uploaded (its ID), for the button's spinner. */
+    var uploading by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Reads the picked PDF and uploads it as the answer to [assignmentId].
+     * Checks size and type on the phone first so students don't wait for a
+     * 10 MB upload just to be told it's too big.
+     */
+    fun uploadProblemSet(
+        assignmentId: String,
+        uri: android.net.Uri,
+        resolver: android.content.ContentResolver,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        if (uploading != null) return
+        viewModelScope.launch {
+            uploading = assignmentId
+            try {
+                val (name, bytes) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    var display = "answer.pdf"
+                    var size = -1L
+                    resolver.query(uri, null, null, null, null)?.use { c ->
+                        if (c.moveToFirst()) {
+                            val ni = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                            val si = c.getColumnIndex(android.provider.OpenableColumns.SIZE)
+                            if (ni >= 0) display = c.getString(ni) ?: display
+                            if (si >= 0 && !c.isNull(si)) size = c.getLong(si)
+                        }
+                    }
+                    if (size > MAX_UPLOAD) throw IllegalArgumentException("The file is larger than 10 MB. Scan at a lower resolution and try again.")
+                    val data = resolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw IllegalArgumentException("Could not read that file.")
+                    display to data
+                }
+                if (bytes.size > MAX_UPLOAD) throw IllegalArgumentException("The file is larger than 10 MB. Scan at a lower resolution and try again.")
+                if (bytes.size < 4 || String(bytes, 0, 4, Charsets.ISO_8859_1) != "%PDF") {
+                    throw IllegalArgumentException("That file is not a PDF. Scan your work to PDF first.")
+                }
+                val fixed = if (name.endsWith(".pdf", true)) name else "$name.pdf"
+                val r = repo.submitProblemSet(sectionId, assignmentId, fixed, bytes)
+                onDone(
+                    (if (r.replaced) "Your new file replaced the old one." else "Submitted.") +
+                        (if (r.late) " It was marked late." else "")
+                )
+                refresh()
+            } catch (e: IllegalArgumentException) {
+                onError(e.message ?: "Could not upload the file.")
+            } catch (e: ApiException) {
+                if (e.authRequired) authLost = e.message else onError(e.message ?: "Could not upload the file.")
+            } catch (e: OfflineException) {
+                onError(e.message ?: "Could not reach the portal.")
+            } catch (e: Exception) {
+                onError("Could not upload the file. Please try again.")
+            } finally {
+                uploading = null
+            }
+        }
+    }
+
+    fun openMySubmission(assignmentId: String, cacheDir: java.io.File, onReady: (DownloadedFile) -> Unit, onError: (String) -> Unit) {
+        if (openingFile != null) return
+        viewModelScope.launch {
+            openingFile = "sub:$assignmentId"
+            try {
+                onReady(repo.downloadMySubmission(sectionId, assignmentId, cacheDir))
+            } catch (e: ApiException) {
+                if (e.authRequired) authLost = e.message else onError(e.message ?: "Could not open the file.")
+            } catch (e: OfflineException) {
+                onError(e.message ?: "Could not reach the portal.")
+            } catch (e: Exception) {
+                onError("Could not open the file.")
+            } finally {
+                openingFile = null
+            }
+        }
+    }
+
     fun start(id: String) {
         if (started) return
         started = true
@@ -695,6 +774,8 @@ class ClassViewModel : ViewModel() {
         }
     }
 }
+
+private const val MAX_UPLOAD = 10L * 1024 * 1024
 
 /* -------------------------------- admin home ------------------------------ */
 
