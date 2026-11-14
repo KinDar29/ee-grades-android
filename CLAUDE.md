@@ -371,4 +371,8 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14 10:10** — Unit Exam No. 8 is open until 2026-11-16 01:00, so
   `REQUIRE_EMAIL_VERIFY` stays FALSE (registration on) until version 23:
   running exams are exempt from the e-mail gate.
+- **2026-11-14 10:54** — Portal deployment version 23: running exams exempt
+  from the e-mail gate (exam save/submit/image skip it; the page never shows
+  the e-mail screen over an exam); `MailCheck.js`. `REQUIRE_EMAIL_VERIFY`
+  turned back to TRUE right after.
 
