@@ -221,7 +221,8 @@ private fun SectionCard(section: ClassSummary, onClick: () -> Unit) {
 fun AdminSectionScreen(
     sectionId: String,
     onBack: () -> Unit,
-    onAuthLost: (String?) -> Unit
+    onAuthLost: (String?) -> Unit,
+    onTool: (String) -> Unit = {}
 ) {
     val vm: AdminSectionViewModel = viewModel()
 
@@ -295,6 +296,13 @@ fun AdminSectionScreen(
                             InfoRow("Schedule", data.section.schedule)
                             InfoRow("Room", data.section.room)
                             InfoRow("Enrolled", "${data.section.enrolled}")
+                        }
+                    }
+
+                    item {
+                        Column {
+                            Spacer(Modifier.height(10.dp))
+                            AdminToolsRow(onTool)
                         }
                     }
 

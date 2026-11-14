@@ -237,6 +237,25 @@ class Repository(
         }
     }
 
+    /* ------------------------------ admin calls ----------------------------- */
+
+    /** Decoder shared with the admin screens. */
+    val json get() = api.json
+
+    /** Any admin action of the portal router, answered as raw JSON. */
+    suspend fun adminCall(action: String, payload: JsonObject): kotlinx.serialization.json.JsonElement =
+        api.call(action, payload, requireToken())
+
+    /** A PDF from an admin action (`admin.submission`, `admin.material`) saved under cacheDir/view-only. */
+    suspend fun adminPdf(action: String, payload: JsonObject, cacheDir: java.io.File): java.io.File {
+        val file = api.json.decodeFromJsonElement(CourseFileData.serializer(), adminCall(action, payload))
+        val bytes = java.util.Base64.getDecoder().decode(file.data)
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val dir = java.io.File(cacheDir, "view-only").apply { mkdirs() }
+            java.io.File(dir, "admin-" + System.nanoTime() + ".pdf").apply { writeBytes(bytes) }
+        }
+    }
+
     /* ----------------------------- problem sets ----------------------------- */
 
     /** Uploads a PDF answer; replaces the previous one until the due time. */

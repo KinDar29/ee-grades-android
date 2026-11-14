@@ -453,7 +453,9 @@ data class RosterEntry(
     val firstName: String = "",
     val grade: Grade = Grade(),
     /** PASSED, CONDITIONAL, FAILED, INC, DROPPED or NONE (portal `standingOf_`). */
-    val standing: String = ""
+    val standing: String = "",
+    /** Assessment ID → raw score (number, or "" when blank). Used by score editing. */
+    val scores: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap()
 ) {
     val displayName: String
         get() = listOf(lastName, firstName)

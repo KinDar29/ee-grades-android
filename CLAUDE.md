@@ -223,8 +223,15 @@ Rules that matter:
 - Class page shows a "Course outcome self-assessment" card when `student.class`
   returns `survey` (opens the Google Form in the browser; ✓ when submitted).
 - Admin roster rows show the `standing` label for INC / Dropped / Conditional /
-  Failed. The admin area in the app stays read-only (no editing, exports,
-  Summary of Grades or indirect dashboard — those are portal-only).
+  Failed. Admin tools on the class page (`ui/AdminLms.kt`, route
+  `tool/{tool}/{sectionId}`, all through `Repository.adminCall` = the portal's
+  own `admin.*` routes): ✎ Scores (one requirement at a time →
+  `admin.scores.save`, from `RosterEntry.scores`), 📝 Problem sets (counts →
+  grader: student's PDF or the problem set above, score box below, Save & next
+  → `admin.submissions.grade`), 🧪 Exams (results, exits, Reset attempt,
+  Release scores, Unit × Level and hardest items), 📄 Materials (upload ≤ 20 MB,
+  show/hide, remove, view). Creating classes/exams/problem sets, students,
+  exports, Summary of Grades and the dashboards are still portal-only.
 - Class page shows "Course files" (from `student.class` `files`); View downloads
   through `student.file`. Problem sets (`downloadable: true`) go to
   `cacheDir/course-files/` and open in the phone's PDF viewer via the
@@ -411,4 +418,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14** — App (1.3.0, not released yet): students take exams and
   submit problem sets in the app (screenshots blocked, screen pinning,
   split-screen / app-switch exits counted).
-
+- **2026-11-14** — App (1.3.0, not released yet): admin tools on the class
+  page — edit scores, grade problem sets side by side, exam results (reset,
+  release, item analysis), materials (upload, show/hide, remove).
