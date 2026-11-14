@@ -59,8 +59,8 @@ change log at the bottom for every change you ship.
   `REQUIRE_EMAIL_VERIFY`, blank = on) until `account.email.send` /
   `account.email.verify`; login/session return `mustVerifyEmail`. Limits: 5
   codes/hour per number and per address, 150/hour portal-wide, 5 wrong tries.
-  The Android app does not handle `MUST_EMAIL` yet — students must verify in
-  the portal once before the app works.
+  The Android app shows its own confirm-e-mail screen from app 1.2.0 (see
+  Android app notes).
 - `Sections.js` — per-section spreadsheets (Info / Grades / Assessments /
   Summary), assessment syncing, grade computation (`computeGrade_`).
 - New-score notifications: `student.updates` (`studentUpdates_` in `Api.js`)
@@ -223,8 +223,16 @@ Rules that matter:
   Failed. The admin area in the app stays read-only (no editing, exports,
   Summary of Grades or indirect dashboard — those are portal-only).
 - Class page shows "Course files" (from `student.class` `files`); View downloads
-  through `student.file` into `cacheDir/course-files/` and opens the phone's
-  PDF viewer via the FileProvider `${applicationId}.files`.
+  through `student.file`. Problem sets (`downloadable: true`) go to
+  `cacheDir/course-files/` and open in the phone's PDF viewer via the
+  FileProvider `${applicationId}.files`. Everything else goes to
+  `cacheDir/view-only/` (not shared) and opens in `ui/ViewOnlyPdf.kt`:
+  PdfRenderer pages in a full-screen dialog with `SecureFlagPolicy.SecureOn`
+  (no screenshots / screen recording), file deleted on close.
+- E-mail gate: `ApiClient` reads `mustVerifyEmail` from any error and sets
+  `SessionSignals.emailNeeded`; `AppViewModel` then switches to
+  `AuthPhase.MustVerifyEmail` → `ConfirmEmailScreen` (`account.email.send` /
+  `account.email.verify`), after the password step if both are due.
 
 ## Releasing the Android app
 
@@ -364,5 +372,10 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   anything that sends mail, check the owner has approved the mail scope.**
 - **2026-11-14 10:04** — Fixed: the owner ran `checkEmailSending()` (new
   `MailCheck.js`) and approved "Send email as you" (it had been unticked);
-  quota 1500/day. Both switches back to TRUE.
+  quota 1500/day. `REGISTRATION_OPEN` back to TRUE; `REQUIRE_EMAIL_VERIFY`
+  left FALSE because Unit Exam No. 8 is open until 2026-11-16 01:00 (turn it
+  on once portal version 23 — running exams exempt — is deployed).
+- **2026-11-14** — App (still 1.2.0, unreleased): confirm-e-mail screen for the
+  portal's e-mail gate; view-only course files open in an in-app viewer with
+  screenshots blocked (problem sets still open in the phone's PDF viewer).
 

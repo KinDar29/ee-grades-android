@@ -23,8 +23,19 @@ import java.util.concurrent.TimeUnit
  */
 class ApiException(
     message: String,
-    val authRequired: Boolean = false
+    val authRequired: Boolean = false,
+    /** The portal wants this student to confirm an e-mail address first. */
+    val mustVerifyEmail: Boolean = false
 ) : Exception(message)
+
+/**
+ * App-wide signal that the portal answered "confirm your e-mail first" to some
+ * request. [ph.edu.mmsu.ee.grades.ui.AppViewModel] watches it and shows the
+ * confirm-e-mail screen, wherever the student happened to be.
+ */
+object SessionSignals {
+    val emailNeeded = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
 
 /** A network or transport failure, as opposed to a rejection by the server. */
 class OfflineException(message: String) : IOException(message)
@@ -132,6 +143,8 @@ class ApiClient(private val baseUrl: String) {
 
         val message = root["error"]?.jsonPrimitive?.content ?: "Something went wrong."
         val authRequired = root["authRequired"]?.jsonPrimitive?.content == "true"
-        throw ApiException(message, authRequired)
+        val mustVerifyEmail = root["mustVerifyEmail"]?.jsonPrimitive?.content == "true"
+        if (mustVerifyEmail) SessionSignals.emailNeeded.value = true
+        throw ApiException(message, authRequired, mustVerifyEmail)
     }
 }

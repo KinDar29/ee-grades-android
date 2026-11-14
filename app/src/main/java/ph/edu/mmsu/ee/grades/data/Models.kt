@@ -19,6 +19,7 @@ data class Profile(
     val program: String = "",
     val yearLevel: String = "",
     val email: String = "",
+    val emailVerified: Boolean = false,
     val adminRole: String = ""
 ) {
     val isAdmin: Boolean get() = role == "admin"
@@ -120,13 +121,29 @@ data class ClassItem(
 data class LoginResult(
     val token: String = "",
     val profile: Profile = Profile(),
-    val mustChangePassword: Boolean = false
+    val mustChangePassword: Boolean = false,
+    val mustVerifyEmail: Boolean = false
 )
 
 @Serializable
 data class SessionInfo(
     val profile: Profile = Profile(),
-    val mustChangePassword: Boolean = false
+    val mustChangePassword: Boolean = false,
+    val mustVerifyEmail: Boolean = false
+)
+
+/** `account.email.send` reply: where the code went (masked) and how long it lasts. */
+@Serializable
+data class EmailCodeSent(
+    val sentTo: String = "",
+    val minutes: Int = 30
+)
+
+/** `account.email.verify` reply. */
+@Serializable
+data class EmailVerified(
+    val done: Boolean = false,
+    val profile: Profile = Profile()
 )
 
 @Serializable
@@ -233,8 +250,13 @@ data class CourseFileData(
     val label: String = "",
     val name: String = "",
     val mimeType: String = "application/pdf",
+    /** False for modules, syllabus, TOS…: shown inside the app only. Problem sets are true. */
+    val downloadable: Boolean = true,
     val data: String = ""
 )
+
+/** A course file on the phone, and whether the student may keep / share it. */
+data class DownloadedFile(val file: java.io.File, val downloadable: Boolean)
 
 /** `submitted` is null when the portal can't tell (no workbook linked). */
 @Serializable

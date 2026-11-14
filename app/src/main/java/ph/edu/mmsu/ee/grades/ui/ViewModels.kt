@@ -13,11 +13,13 @@ import ph.edu.mmsu.ee.grades.data.ApiException
 import ph.edu.mmsu.ee.grades.data.LoginResult
 import ph.edu.mmsu.ee.grades.data.OfflineException
 import ph.edu.mmsu.ee.grades.data.PortalInfo
+import ph.edu.mmsu.ee.grades.data.SessionSignals
+import ph.edu.mmsu.ee.grades.data.DownloadedFile
 import ph.edu.mmsu.ee.grades.data.Profile
 import ph.edu.mmsu.ee.grades.data.StudentClass
 import ph.edu.mmsu.ee.grades.data.StudentHome
 
-enum class AuthPhase { Checking, SignedOut, MustChangePassword, Ready }
+enum class AuthPhase { Checking, SignedOut, MustChangePassword, MustVerifyEmail, Ready }
 
 /**
  * Owns the question "who is using this app right now", and nothing else.
@@ -35,8 +37,30 @@ class AppViewModel : ViewModel() {
     var notice by mutableStateOf<String?>(null)
         private set
 
+    /** The portal wants an e-mail confirmed once the password step is done. */
+    private var needEmail = false
+
     init {
         bootstrap()
+        // Any request can come back "confirm your e-mail first" (for example
+        // when the instructor turns the step on mid-session).
+        viewModelScope.launch {
+            SessionSignals.emailNeeded.collect { needed ->
+                if (needed && profile?.isAdmin == false) {
+                    needEmail = true
+                    if (phase == AuthPhase.Ready) phase = AuthPhase.MustVerifyEmail
+                }
+            }
+        }
+    }
+
+    private fun nextPhase(mustChange: Boolean, mustEmail: Boolean): AuthPhase {
+        needEmail = mustEmail
+        return when {
+            mustChange -> AuthPhase.MustChangePassword
+            mustEmail -> AuthPhase.MustVerifyEmail
+            else -> AuthPhase.Ready
+        }
     }
 
     fun bootstrap() {
@@ -52,11 +76,7 @@ class AppViewModel : ViewModel() {
             try {
                 val session = repo.session()
                 profile = session.profile
-                phase = if (session.mustChangePassword) {
-                    AuthPhase.MustChangePassword
-                } else {
-                    AuthPhase.Ready
-                }
+                phase = nextPhase(session.mustChangePassword, session.mustVerifyEmail)
             } catch (e: ApiException) {
                 if (e.authRequired) {
                     repo.signOut()
@@ -86,10 +106,16 @@ class AppViewModel : ViewModel() {
     fun onSignedIn(result: LoginResult) {
         profile = result.profile
         notice = null
-        phase = if (result.mustChangePassword) AuthPhase.MustChangePassword else AuthPhase.Ready
+        phase = nextPhase(result.mustChangePassword, result.mustVerifyEmail)
     }
 
     fun onPasswordChanged() {
+        phase = if (needEmail) AuthPhase.MustVerifyEmail else AuthPhase.Ready
+    }
+
+    fun onEmailVerified(updated: Profile) {
+        profile = updated
+        needEmail = false
         phase = AuthPhase.Ready
     }
 
@@ -182,6 +208,91 @@ class LoginViewModel : ViewModel() {
 }
 
 /* ----------------------------- change password ---------------------------- */
+
+/* ------------------------------ confirm e-mail ----------------------------- */
+
+class ConfirmEmailViewModel : ViewModel() {
+
+    private val repo = ServiceLocator.repo
+
+    var email by mutableStateOf("")
+    var code by mutableStateOf("")
+
+    /** Masked address the last code went to; null until a code was sent. */
+    var sentTo by mutableStateOf<String?>(null)
+        private set
+    var info by mutableStateOf<String?>(null)
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    private var prefilled = false
+
+    fun prefill(current: String) {
+        if (prefilled) return
+        prefilled = true
+        email = current
+    }
+
+    /** Editing the address after a code went out means a new code is needed. */
+    fun onEmailChange(value: String) {
+        email = value
+        if (sentTo != null) { sentTo = null; code = ""; info = null }
+    }
+
+    fun send() {
+        if (busy) return
+        val e = email.trim()
+        if (!Regex("^[^\\s@,;]+@[^\\s@,;]+\\.[A-Za-z]{2,}$").matches(e)) {
+            error = "Please enter a valid e-mail address, e.g. juan.delacruz@gmail.com"
+            return
+        }
+        viewModelScope.launch {
+            busy = true
+            error = null
+            try {
+                val r = repo.sendEmailCode(e)
+                sentTo = r.sentTo
+                info = "We sent a 6-digit code to ${r.sentTo}. It expires in ${r.minutes} minutes. " +
+                    "Not there? Check your spam or promotions folder."
+            } catch (ex: ApiException) {
+                error = ex.message
+            } catch (ex: OfflineException) {
+                error = ex.message
+            } catch (ex: Exception) {
+                error = "Something went wrong. Please try again."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun verify(onDone: (Profile) -> Unit) {
+        if (busy) return
+        val c = code.filter { it.isDigit() }
+        if (c.length != 6) {
+            error = "Enter the 6-digit code from the e-mail."
+            return
+        }
+        viewModelScope.launch {
+            busy = true
+            error = null
+            try {
+                onDone(repo.verifyEmailCode(c))
+            } catch (ex: ApiException) {
+                error = ex.message
+            } catch (ex: OfflineException) {
+                error = ex.message
+            } catch (ex: Exception) {
+                error = "Something went wrong. Please try again."
+            } finally {
+                busy = false
+            }
+        }
+    }
+}
 
 class ChangePasswordViewModel : ViewModel() {
 
@@ -404,12 +515,12 @@ class ClassViewModel : ViewModel() {
     private var sectionId: String = ""
     private var started = false
 
-    fun openFile(kind: String, dir: java.io.File, onReady: (java.io.File) -> Unit, onError: (String) -> Unit) {
+    fun openFile(kind: String, cacheDir: java.io.File, onReady: (DownloadedFile) -> Unit, onError: (String) -> Unit) {
         if (openingFile != null) return
         viewModelScope.launch {
             openingFile = kind
             try {
-                onReady(repo.downloadCourseFile(sectionId, kind, dir))
+                onReady(repo.downloadCourseFile(sectionId, kind, cacheDir))
             } catch (e: ApiException) {
                 if (e.authRequired) authLost = e.message else onError(e.message ?: "Could not open the file.")
             } catch (e: OfflineException) {

@@ -47,6 +47,12 @@ fun AppRoot() {
             onSignOut = { app.signOut() }
         )
 
+        AuthPhase.MustVerifyEmail -> ConfirmEmailScreen(
+            currentEmail = app.profile?.email.orEmpty(),
+            onDone = { app.onEmailVerified(it) },
+            onSignOut = { app.signOut() }
+        )
+
         AuthPhase.Ready -> SignedInNav(app)
     }
 }
