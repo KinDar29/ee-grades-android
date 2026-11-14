@@ -351,3 +351,12 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   verification (owner's choices: active at once, students pick their
   classes) and a one-time "confirm your e-mail" step for every existing
   student before they can use the portal.
+- **2026-11-14 09:50** — Incident: the e-mail gate went live but the project
+  had never been authorized for `script.send_mail` (MailApp) — every code
+  send failed with "You do not have permission to call MailApp…", locking
+  students at "Confirm your e-mail" (forgot-password e-mails never worked
+  either). Mitigation: Settings `REQUIRE_EMAIL_VERIFY` = FALSE and
+  `REGISTRATION_OPEN` = FALSE. Fix: the owner runs any function once in the
+  editor and approves; then set both back to TRUE. **Before shipping
+  anything that sends mail, check the owner has approved the mail scope.**
+
