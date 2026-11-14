@@ -78,7 +78,8 @@ private fun SignedInNav(app: AppViewModel) {
                 AdminHomeScreen(
                     onOpenSection = { nav.navigate("${Route.SECTION}/${it.id}") },
                     onOpenSettings = { nav.navigate(Route.SETTINGS) },
-                    onAuthLost = onAuthLost
+                    onAuthLost = onAuthLost,
+                    onManage = { nav.navigate("manage/$it") }
                 )
             } else {
                 HomeScreen(
@@ -132,6 +133,18 @@ private fun SignedInNav(app: AppViewModel) {
         }
 
         composable(
+            route = "manage/{what}",
+            arguments = listOf(navArgument("what") { type = NavType.StringType })
+        ) { entry ->
+            val back = { nav.popBackStack(); Unit }
+            when (entry.arguments?.getString("what")) {
+                "students" -> AdminStudentsScreen(back, onAuthLost)
+                "catalog" -> AdminCatalogScreen(back, onAuthLost)
+                else -> AdminPortalSettingsScreen(back, onAuthLost)
+            }
+        }
+
+        composable(
             route = "${Route.TOOL}/{tool}/{sectionId}",
             arguments = listOf(
                 navArgument("tool") { type = NavType.StringType },
@@ -144,6 +157,8 @@ private fun SignedInNav(app: AppViewModel) {
                 "scores" -> AdminScoresScreen(sid, back, onAuthLost)
                 "problemsets" -> AdminProblemSetsScreen(sid, back, onAuthLost)
                 "exams" -> AdminExamsScreen(sid, back, onAuthLost)
+                "requirements" -> AdminRequirementsScreen(sid, back, onAuthLost)
+                "enrolment" -> AdminEnrolmentScreen(sid, back, onAuthLost)
                 else -> AdminMaterialsScreen(sid, back, onAuthLost)
             }
         }

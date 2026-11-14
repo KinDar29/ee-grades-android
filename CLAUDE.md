@@ -230,8 +230,15 @@ Rules that matter:
   grader: student's PDF or the problem set above, score box below, Save & next
   → `admin.submissions.grade`), 🧪 Exams (results, exits, Reset attempt,
   Release scores, Unit × Level and hardest items), 📄 Materials (upload ≤ 20 MB,
-  show/hide, remove, view). Creating classes/exams/problem sets, students,
-  exports, Summary of Grades and the dashboards are still portal-only.
+  show/hide, remove, view), 📋 Requirements (add/edit; delete only when no
+  scores), 👤 Enrolment (add by numbers, remove, INC/Dropped, sync), new/edit
+  exams (blueprint from the bank, create bank) and problem sets.
+  Admin home (`ui/AdminManage.kt`, route `manage/{what}`): 👥 Students (search,
+  add, edit, import, reset password, delete), 🗂 Semesters & classes
+  (semesters, subjects, classes, archive), ⚙ Portal settings. The app never
+  deletes student work: requirements with scores, exams someone started and
+  problem sets with submissions can only be removed on the portal. Exports,
+  Summary of Grades and the dashboards are still portal-only.
 - Class page shows "Course files" (from `student.class` `files`); View downloads
   through `student.file`. Problem sets (`downloadable: true`) go to
   `cacheDir/course-files/` and open in the phone's PDF viewer via the
@@ -421,3 +428,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14** — App (1.3.0, not released yet): admin tools on the class
   page — edit scores, grade problem sets side by side, exam results (reset,
   release, item analysis), materials (upload, show/hide, remove).
+- **2026-11-14** — App (1.3.0, not released yet): admin management —
+  students, semesters / subjects / classes, portal settings, requirements,
+  enrolment and final status, new exams and problem sets.

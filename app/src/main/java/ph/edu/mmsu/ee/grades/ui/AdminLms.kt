@@ -224,12 +224,18 @@ fun AdminProblemSetsScreen(sectionId: String, onBack: () -> Unit, onAuthLost: (S
         GraderScreen(vm, subs, context, onBack = { vm.close(); vm.load(sectionId) })
         return
     }
+    var editSet by remember { mutableStateOf("") }
+    if (editSet.isNotBlank()) EditProblemSetDialog(sectionId, editSet, onDismiss = { editSet = "" }, onChanged = { vm.load(sectionId) })
     ToolScaffold("Problem sets", onBack, vm.busy, vm.error) {
-        if (vm.list.isEmpty() && !vm.busy) item { Text("No problem sets yet. Create them on the web portal.", Modifier.padding(16.dp)) }
+        item { ProblemSetSetupBlock(sectionId, onChanged = { vm.load(sectionId) }) }
+        if (vm.list.isEmpty() && !vm.busy) item { Text("No problem sets yet.", Modifier.padding(16.dp)) }
         items(vm.list, key = { it.id }) { a ->
             Card(Modifier.fillMaxWidth().clickable { vm.open(a) }) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(a.title, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(a.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { editSet = a.id }) { Text("Edit") }
+                    }
                     Text("Due ${whenLabel(a.dueAt)} · column “${a.columnName}”", style = MaterialTheme.typography.bodySmall)
                     Text(
                         "${a.counts.submitted}/${a.counts.students} submitted · ${a.counts.late} late · ${a.counts.graded} graded",
@@ -329,12 +335,18 @@ fun AdminExamsScreen(sectionId: String, onBack: () -> Unit, onAuthLost: (String?
         ExamResultsScreen(vm, r)
         return
     }
+    var editExam by remember { mutableStateOf<AdmExam?>(null) }
+    editExam?.let { e -> EditExamDialog(sectionId, e, onDismiss = { editExam = null }, onChanged = { vm.load(sectionId) }) }
     ToolScaffold("Exams", onBack, vm.busy, vm.error) {
-        if (vm.list.isEmpty() && !vm.busy) item { Text("No exams yet. Create them on the web portal.", Modifier.padding(16.dp)) }
+        item { ExamSetupBlock(sectionId, onChanged = { vm.load(sectionId) }) }
+        if (vm.list.isEmpty() && !vm.busy) item { Text("No exams yet.", Modifier.padding(16.dp)) }
         items(vm.list, key = { it.id }) { e ->
             Card(Modifier.fillMaxWidth().clickable { vm.open(e.id) }) {
                 Column(Modifier.padding(16.dp)) {
-                    Text(e.title, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(e.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { editExam = e }) { Text("Edit") }
+                    }
                     Text("${e.items} items · ${e.duration} min · ${whenLabel(e.opensAt)} → ${whenLabel(e.closesAt)}", style = MaterialTheme.typography.bodySmall)
                     Text(
                         "${e.state} · ${e.counts.submitted}/${e.counts.students} submitted · ${if (e.released) "scores released" else "scores hidden"}",
@@ -613,5 +625,7 @@ fun AdminToolsRow(onTool: (String) -> Unit) {
         OutlinedButton(onClick = { onTool("problemsets") }) { Text("📝 Problem sets") }
         OutlinedButton(onClick = { onTool("exams") }) { Text("🧪 Exams") }
         OutlinedButton(onClick = { onTool("materials") }) { Text("📄 Materials") }
+        OutlinedButton(onClick = { onTool("requirements") }) { Text("📋 Requirements") }
+        OutlinedButton(onClick = { onTool("enrolment") }) { Text("👤 Enrolment") }
     }
 }

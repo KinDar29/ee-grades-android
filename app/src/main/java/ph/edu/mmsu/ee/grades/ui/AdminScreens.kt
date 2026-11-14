@@ -48,7 +48,8 @@ import ph.edu.mmsu.ee.grades.data.RosterEntry
 fun AdminHomeScreen(
     onOpenSection: (ClassSummary) -> Unit,
     onOpenSettings: () -> Unit,
-    onAuthLost: (String?) -> Unit
+    onAuthLost: (String?) -> Unit,
+    onManage: (String) -> Unit = {}
 ) {
     val vm: AdminHomeViewModel = viewModel()
 
@@ -116,6 +117,8 @@ fun AdminHomeScreen(
                             StatTile("Subjects", data.counts.subjects, Modifier.weight(1f))
                         }
                     }
+
+                    item { AdminManageRow(onManage) }
 
                     vm.error?.let { message ->
                         item { ErrorBanner(message = message, onRetry = { vm.refresh() }) }
