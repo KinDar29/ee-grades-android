@@ -13,6 +13,7 @@ import ph.edu.mmsu.ee.grades.data.ApiException
 import ph.edu.mmsu.ee.grades.data.LoginResult
 import ph.edu.mmsu.ee.grades.data.OfflineException
 import ph.edu.mmsu.ee.grades.data.PortalInfo
+import ph.edu.mmsu.ee.grades.data.RegistrationOptions
 import ph.edu.mmsu.ee.grades.data.SessionSignals
 import ph.edu.mmsu.ee.grades.data.DownloadedFile
 import ph.edu.mmsu.ee.grades.data.Profile
@@ -208,6 +209,131 @@ class LoginViewModel : ViewModel() {
 }
 
 /* ----------------------------- change password ---------------------------- */
+
+/* ------------------------------- registration ------------------------------ */
+
+class RegisterViewModel : ViewModel() {
+
+    private val repo = ServiceLocator.repo
+
+    var options by mutableStateOf<RegistrationOptions?>(null)
+        private set
+    var loading by mutableStateOf(true)
+        private set
+
+    var studentId by mutableStateOf("")
+    var email by mutableStateOf("")
+    var lastName by mutableStateOf("")
+    var firstName by mutableStateOf("")
+    var middleName by mutableStateOf("")
+    var program by mutableStateOf("")
+    var yearLevel by mutableStateOf("")
+    var password by mutableStateOf("")
+    var confirm by mutableStateOf("")
+    var picked by mutableStateOf(setOf<String>())
+    var code by mutableStateOf("")
+
+    /** Masked address the code went to; non-null once step 1 succeeded. */
+    var sentTo by mutableStateOf<String?>(null)
+        private set
+    var busy by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    init { load() }
+
+    fun load() {
+        viewModelScope.launch {
+            loading = true
+            error = null
+            try {
+                options = repo.registrationOptions()
+            } catch (e: ApiException) {
+                error = e.message
+            } catch (e: OfflineException) {
+                error = e.message
+            } catch (e: Exception) {
+                error = "Something went wrong. Please try again."
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    fun toggle(sectionId: String) {
+        picked = if (sectionId in picked) picked - sectionId else picked + sectionId
+    }
+
+    /** Back from the code step to fix the form. */
+    fun editForm() {
+        sentTo = null
+        code = ""
+        error = null
+    }
+
+    fun send() {
+        if (busy) return
+        val min = options?.minPassword ?: 6
+        error = when {
+            !Regex("^\\d{2}-\\d{4,6}$").matches(studentId.trim()) ->
+                "Enter your student number as printed on your ID, e.g. 25-050366."
+            lastName.isBlank() || firstName.isBlank() -> "Please enter your last name and first name."
+            program.isBlank() -> "Please choose your program."
+            yearLevel.isBlank() -> "Please choose your year level."
+            email.isBlank() -> "Please enter your e-mail address."
+            password.length < min -> "Your password must be at least $min characters."
+            password != confirm -> "The two passwords do not match."
+            picked.isEmpty() -> "Please tick at least one class you are taking."
+            else -> null
+        }
+        if (error != null) return
+        viewModelScope.launch {
+            busy = true
+            try {
+                val r = repo.registrationStart(
+                    studentId.trim(), email.trim(), lastName.trim(), firstName.trim(), middleName.trim(),
+                    program, yearLevel, password, picked.toList()
+                )
+                sentTo = r.sentTo
+            } catch (e: ApiException) {
+                error = e.message
+            } catch (e: OfflineException) {
+                error = e.message
+            } catch (e: Exception) {
+                error = "Something went wrong. Please try again."
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    /** Step 2: the code creates the account; then sign in with the new password. */
+    fun verify(onSignedIn: (LoginResult) -> Unit) {
+        if (busy) return
+        val c = code.filter { it.isDigit() }
+        if (c.length != 6) {
+            error = "Enter the 6-digit code from the e-mail."
+            return
+        }
+        viewModelScope.launch {
+            busy = true
+            error = null
+            try {
+                repo.registrationVerify(studentId.trim(), c)
+                onSignedIn(repo.login("student", studentId.trim(), password))
+            } catch (e: ApiException) {
+                error = e.message
+            } catch (e: OfflineException) {
+                error = e.message
+            } catch (e: Exception) {
+                error = "Something went wrong. Please try again."
+            } finally {
+                busy = false
+            }
+        }
+    }
+}
 
 /* ------------------------------ confirm e-mail ----------------------------- */
 

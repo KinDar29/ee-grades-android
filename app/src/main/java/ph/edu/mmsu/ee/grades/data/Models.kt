@@ -204,7 +204,41 @@ data class PortalInfo(
     val subtitle: String = "Student Grades Portal",
     val announcement: String = "",
     val contactEmail: String = "",
-    val allowPasswordChange: Boolean = true
+    val allowPasswordChange: Boolean = true,
+    /** Portal setting REGISTRATION_OPEN: show "Create your account". */
+    val registrationOpen: Boolean = false
+)
+
+/* ------------------------------ registration ------------------------------ */
+
+/** `register.options`: what the new-student form may offer. */
+@Serializable
+data class RegistrationOptions(
+    val open: Boolean = false,
+    val programs: List<String> = emptyList(),
+    val years: List<String> = emptyList(),
+    val classes: List<RegClass> = emptyList(),
+    val minPassword: Int = 6
+)
+
+/** One class of the active semester a new student may tick. */
+@Serializable
+data class RegClass(
+    val id: String = "",
+    val subject: String = "",
+    val title: String = "",
+    val section: String = "",
+    val schedule: String = "",
+    val instructor: String = ""
+)
+
+/** `register.verify` reply. */
+@Serializable
+data class RegistrationDone(
+    val done: Boolean = false,
+    val studentId: String = "",
+    val enrolled: Int = 0,
+    val problems: List<String> = emptyList()
 )
 
 @Serializable

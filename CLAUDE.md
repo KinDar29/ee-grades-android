@@ -229,6 +229,10 @@ Rules that matter:
   `cacheDir/view-only/` (not shared) and opens in `ui/ViewOnlyPdf.kt`:
   PdfRenderer pages in a full-screen dialog with `SecureFlagPolicy.SecureOn`
   (no screenshots / screen recording), file deleted on close.
+- Registration: "Create your account" on the sign-in screen (students, when
+  `portal` says `registrationOpen`) → `ui/RegisterScreen.kt` (same form as the
+  portal: `register.options` / `register.start` / `register.verify`), then
+  signs in with the new password.
 - E-mail gate: `ApiClient` reads `mustVerifyEmail` from any error and sets
   `SessionSignals.emailNeeded`; `AppViewModel` then switches to
   `AuthPhase.MustVerifyEmail` → `ConfirmEmailScreen` (`account.email.send` /
@@ -378,4 +382,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14** — App (still 1.2.0, unreleased): confirm-e-mail screen for the
   portal's e-mail gate; view-only course files open in an in-app viewer with
   screenshots blocked (problem sets still open in the phone's PDF viewer).
+- **2026-11-14** — App (still 1.2.0, unreleased): new-student registration
+  screen, same steps as the portal.
 
