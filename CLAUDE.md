@@ -205,7 +205,10 @@ Rules that matter:
    `application/vnd.google-apps.script+json` returns every file as JSON
    (`files[].name/type/source`).
 5. If a change needs a new Google permission (e.g. MailApp), the owner must run
-   any function once in the editor and approve, or the web app fails.
+   a function **that uses it** in the editor and approve, or the web app fails.
+   Google's consent screen lets people untick single permissions, and running
+   an unrelated function does NOT re-ask. For e-mail run `checkEmailSending()`
+   (`MailCheck.js`, sends nothing) — it must log "E-mails left today: N".
 
 ## Android app notes
 
@@ -359,4 +362,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   `REGISTRATION_OPEN` = FALSE. Fix: the owner runs any function once in the
   editor and approves; then set both back to TRUE. **Before shipping
   anything that sends mail, check the owner has approved the mail scope.**
+- **2026-11-14 10:04** — Fixed: the owner ran `checkEmailSending()` (new
+  `MailCheck.js`) and approved "Send email as you" (it had been unticked);
+  quota 1500/day. Both switches back to TRUE.
 
