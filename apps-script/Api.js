@@ -116,11 +116,11 @@ function route_(action, p, token) {
     case 'student.exam.start':
       return startExam_(requireSession_(token, 'student'), p);
     case 'student.exam.save':
-      return saveExamAnswers_(requireSession_(token, 'student'), p);
+      return saveExamAnswers_(requireSession_(token, 'student', false, true), p);
     case 'student.exam.submit':
-      return submitExam_(requireSession_(token, 'student'), p);
+      return submitExam_(requireSession_(token, 'student', false, true), p);
     case 'student.exam.image':
-      return examImage_(requireSession_(token, 'student'), p);
+      return examImage_(requireSession_(token, 'student', false, true), p);
     case 'student.file':        // Android app 1.2.0: `kind` is the Material ID
     case 'student.material':
       return getMaterialFile_(requireSession_(token, 'student'), p.sectionId, p.id || p.kind);

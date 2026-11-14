@@ -61,6 +61,9 @@ change log at the bottom for every change you ship.
   codes/hour per number and per address, 150/hour portal-wide, 5 wrong tries.
   The Android app shows its own confirm-e-mail screen from app 1.2.0 (see
   Android app notes).
+  Exam save / submit / image skip the gate (`requireSession_` 4th argument
+  `skipEmailCheck`) and the page never pops the e-mail screen over a running
+  exam, so turning the gate on mid-exam can't lock anyone out of an attempt.
 - `Sections.js` — per-section spreadsheets (Info / Grades / Assessments /
   Summary), assessment syncing, grade computation (`computeGrade_`).
 - New-score notifications: `student.updates` (`studentUpdates_` in `Api.js`)
@@ -376,12 +379,19 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   anything that sends mail, check the owner has approved the mail scope.**
 - **2026-11-14 10:04** — Fixed: the owner ran `checkEmailSending()` (new
   `MailCheck.js`) and approved "Send email as you" (it had been unticked);
-  quota 1500/day. `REGISTRATION_OPEN` back to TRUE; `REQUIRE_EMAIL_VERIFY`
-  left FALSE because Unit Exam No. 8 is open until 2026-11-16 01:00 (turn it
-  on once portal version 23 — running exams exempt — is deployed).
-- **2026-11-14** — App (still 1.2.0, unreleased): confirm-e-mail screen for the
-  portal's e-mail gate; view-only course files open in an in-app viewer with
-  screenshots blocked (problem sets still open in the phone's PDF viewer).
-- **2026-11-14** — App (still 1.2.0, unreleased): new-student registration
-  screen, same steps as the portal.
+  quota 1500/day. `REGISTRATION_OPEN` back to TRUE.
+- **2026-11-14 10:10** — Unit Exam No. 8 is open until 2026-11-16 01:00, so
+  `REQUIRE_EMAIL_VERIFY` stays FALSE (registration on) until version 23:
+  running exams are exempt from the e-mail gate.
+- **2026-11-14 10:54** — Portal deployment version 23: running exams exempt
+  from the e-mail gate (exam save/submit/image skip it; the page never shows
+  the e-mail screen over an exam); `MailCheck.js`. `REQUIRE_EMAIL_VERIFY`
+  turned back to TRUE right after.
+- **2026-11-14** — App 1.2.0: confirm-e-mail screen for the portal's e-mail
+  gate; view-only course files open in an in-app viewer with screenshots
+  blocked (problem sets still open in the phone's PDF viewer); new-student
+  registration screen, same steps as the portal.
+- **2026-11-14 11:45** — Signing key created on the owner's laptop
+  (Documents\EE-Grades-Key, alias `ee-grades`, RSA 4096, PKCS12, ~27 years);
+  the owner added the three secrets. Merging this releases **v1.2.0**.
 
