@@ -1539,6 +1539,7 @@ function renderExam(sectionId, examId) {
     EXAM = {
       sectionId: sectionId, x: x, offset: x.serverNow - Date.now(),
       answers: (local && local.a) || x.answers || [], away: Math.max((local && local.away) || 0, x.away || 0),
+      pos: Math.max((local && local.pos) || 0, x.pos || 0), cur: 0,
       dirty: false, timer: null, saver: null, submitting: false, out: false
     };
     drawExam();
@@ -1551,16 +1552,19 @@ function renderExam(sectionId, examId) {
 }
 
 function examLocalSave() {
-  try { localStorage.setItem('ee.exam.' + EXAM.x.attemptId, JSON.stringify({ a: EXAM.answers, away: EXAM.away })); } catch (e) { /* private mode */ }
+  try { localStorage.setItem('ee.exam.' + EXAM.x.attemptId, JSON.stringify({ a: EXAM.answers, away: EXAM.away, pos: EXAM.pos })); } catch (e) { /* private mode */ }
 }
 
 function drawExam() {
   var x = EXAM.x;
+  var nav = x.navigation || 'ALL', single = nav !== 'ALL', noBack = nav === 'NOBACK';
+  if (noBack) EXAM.cur = Math.min(EXAM.pos, x.items - 1);
+  EXAM.cur = Math.max(0, Math.min(EXAM.cur || 0, x.items - 1));
   var html = '<div class="exam-bar"><div><b>' + esc(x.title) + '</b><div class="tiny muted"><span id="exCount"></span> · <span id="exSaved">not saved yet</span></div></div>' +
     '<div class="spacer"></div><div class="exam-timer" id="exTimer">--:--</div>' +
     '<button class="btn primary" id="exSubmit">Submit</button></div>' +
     '<div class="exam-qs">' + x.questions.map(function (q) {
-      return '<div class="card exam-q" id="q' + q.n + '"><div class="card-body">' +
+      return '<div class="card exam-q' + (single && q.n !== EXAM.cur ? ' exam-q-off' : '') + '" id="q' + q.n + '"><div class="card-body">' +
         '<div class="exam-qn">Question ' + (q.n + 1) + ' of ' + x.items + '</div>' +
         '<div class="exam-text">' + esc(q.text) + '</div>' +
         (q.image ? '<div class="exam-img" data-img="' + q.n + '"><span class="small muted">Loading the figure…</span></div>' : '') +
@@ -1570,9 +1574,17 @@ function drawExam() {
             '<span class="exam-letter">' + 'ABCD'.charAt(i) + '</span><span>' + esc(c) + '</span></label>';
         }).join('') + '</div></div></div>';
     }).join('') + '</div>' +
-    '<div class="row" style="margin:18px 0 40px"><div class="spacer"></div><button class="btn primary" id="exSubmit2">Submit the exam</button></div>';
+    (single
+      ? '<div class="exam-nav">' + (noBack ? '' : '<button class="btn" id="exPrev">← Previous</button>') +
+        '<div class="spacer"></div><button class="btn primary" id="exNext">Next →</button></div>' +
+        (noBack ? '<p class="tiny faint" style="text-align:center;margin:6px 0 30px">You can’t go back to a question after pressing Next.</p>'
+          : '<div class="exam-dots" id="exDots">' + x.questions.map(function (q) {
+            return '<button type="button" class="exam-dot" data-go="' + q.n + '">' + (q.n + 1) + '</button>';
+          }).join('') + '</div>')
+      : '<div class="row" style="margin:18px 0 40px"><div class="spacer"></div><button class="btn primary" id="exSubmit2">Submit the exam</button></div>');
   setContent(html);
   updateExamCount();
+  if (single) bindExamNav(noBack);
 
   $$('.exam-choice input').forEach(function (inp) {
     inp.addEventListener('change', function () {
@@ -1582,6 +1594,7 @@ function drawExam() {
       EXAM.dirty = true;
       examLocalSave();
       updateExamCount();
+      if (single) drawExamNav();
     });
   });
   $$('[data-img]').forEach(function (box) {
@@ -1590,7 +1603,8 @@ function drawExam() {
     }).catch(function () { box.innerHTML = '<span class="small muted">The figure could not be loaded.</span>'; });
   });
   $('#exSubmit').addEventListener('click', function () { confirmExamSubmit(); });
-  $('#exSubmit2').addEventListener('click', function () { confirmExamSubmit(); });
+  var s2 = $('#exSubmit2');
+  if (s2) s2.addEventListener('click', function () { confirmExamSubmit(); });
 
   clearInterval(EXAM.timer);
   EXAM.timer = setInterval(tickExam, 500);
@@ -1599,6 +1613,54 @@ function drawExam() {
   EXAM.saver = setInterval(function () { if (EXAM && EXAM.dirty) saveExamNow(); }, 75000 + Math.random() * 30000);
   window.onbeforeunload = function () { return 'Your exam is still running.'; };
   examGuardOn();
+}
+
+/* ---- one question at a time ---- */
+
+function examShowQ(i) {
+  EXAM.cur = i;
+  $$('.exam-q').forEach(function (c) { c.classList.toggle('exam-q-off', c.id !== 'q' + i); });
+  drawExamNav();
+  window.scrollTo(0, 0);
+}
+
+function drawExamNav() {
+  if (!EXAM) return;
+  var x = EXAM.x, i = EXAM.cur, last = i >= x.items - 1;
+  var prev = $('#exPrev'), next = $('#exNext');
+  if (prev) prev.disabled = i === 0;
+  if (next) next.textContent = last ? 'Submit the exam' : 'Next →';
+  $$('.exam-dot').forEach(function (d) {
+    var n = Number(d.dataset.go), a = EXAM.answers[n];
+    d.classList.toggle('done', a !== null && a !== undefined);
+    d.classList.toggle('here', n === i);
+  });
+}
+
+function bindExamNav(noBack) {
+  var prev = $('#exPrev');
+  if (prev) prev.addEventListener('click', function () { if (EXAM.cur > 0) examShowQ(EXAM.cur - 1); });
+  $$('.exam-dot').forEach(function (d) { d.addEventListener('click', function () { examShowQ(Number(this.dataset.go)); }); });
+  $('#exNext').addEventListener('click', function () {
+    var i = EXAM.cur, x = EXAM.x;
+    if (i >= x.items - 1) { confirmExamSubmit(); return; }
+    var blank = EXAM.answers[i] === null || EXAM.answers[i] === undefined;
+    var go = function () {
+      if (noBack) {
+        EXAM.pos = Math.max(EXAM.pos, i + 1);
+        $$('input[name="q' + i + '"]').forEach(function (o) { o.disabled = true; });
+        EXAM.dirty = true;
+        examLocalSave();
+        saveExamNow();          // tell the server right away: question i is now final
+      }
+      examShowQ(i + 1);
+    };
+    if (noBack && blank) {
+      confirmDialog('Skip this question?', 'You haven’t answered question ' + (i + 1) + '. You can’t come back to it after moving on.', 'Skip it', false)
+        .then(function (ok) { if (ok) go(); });
+    } else go();
+  });
+  drawExamNav();
 }
 
 /* ---- exam guard: full screen, exits, blur, no copy, watermark ---- */
@@ -1770,7 +1832,7 @@ function saveExamNow() {
   if (!EXAM || EXAM.submitting) return;
   var sent = EXAM.answers.slice();
   EXAM.dirty = false;
-  callRetry('student.exam.save', { attemptId: EXAM.x.attemptId, answers: sent, away: EXAM.away }, 3).then(function (r) {
+  callRetry('student.exam.save', { attemptId: EXAM.x.attemptId, answers: sent, away: EXAM.away, pos: EXAM.pos }, 3).then(function (r) {
     if (!EXAM) return;
     if (r.locked) { examLocked(r); return; }
     if (r.serverNow) EXAM.offset = r.serverNow - Date.now();
@@ -1797,7 +1859,7 @@ function submitExamNow(timeUp) {
   clearInterval(EXAM.saver);
   var ex = EXAM;
   loading(timeUp ? 'Time is up — submitting your answers…' : 'Submitting…');
-  callRetry('student.exam.submit', { attemptId: ex.x.attemptId, answers: ex.answers, away: ex.away }, 6).then(function (r) {
+  callRetry('student.exam.submit', { attemptId: ex.x.attemptId, answers: ex.answers, away: ex.away, pos: ex.pos }, 6).then(function (r) {
     try { localStorage.removeItem('ee.exam.' + ex.x.attemptId); } catch (e) { /* ignore */ }
     window.onbeforeunload = null;
     examGuardOff();
@@ -2058,6 +2120,19 @@ function manageAssignments(section) {
 /* --------------------------------- exams ---------------------------------- */
 
 /** "Lock after N exits" input (0 = never). */
+function navField(id, value) {
+  var v = value || 'ALL';
+  var opt = function (k, t) { return '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>' + t + '</option>'; };
+  return '<div class="field" style="margin-top:10px"><label for="' + id + '">Questions shown</label>' +
+    '<select id="' + id + '">' + opt('ALL', 'All questions on one page') + opt('ONE', 'One question at a time (students can go back)') +
+    opt('NOBACK', 'One question at a time, no going back') + '</select>' +
+    '<div class="tiny faint" style="margin-top:4px">With “no going back”, once a student moves to the next question the answer to the previous one is final — the server ignores later changes to it.</div></div>';
+}
+
+function navLabel(v) {
+  return v === 'NOBACK' ? 'one at a time, no going back' : (v === 'ONE' ? 'one at a time' : 'all on one page');
+}
+
 function exitsField(id, value) {
   return '<div class="field" style="margin-top:10px"><label for="' + id + '">Lock the exam after <span class="faint">(times a student leaves it)</span></label>' +
     '<div class="row" style="gap:8px"><input type="number" id="' + id + '" min="0" max="20" value="' + (Number(value) || 0) + '" style="width:80px;text-align:right">' +
@@ -2110,7 +2185,7 @@ function manageExams(section) {
         '<div class="field"><label>Opens</label><input type="datetime-local" id="xOpen"></div>' +
         '<div class="field"><label>Closes</label><input type="datetime-local" id="xClose"></div></div>' +
         '<label class="check"><input type="checkbox" id="xShow"> Show students their score right after submitting <span class="faint">(otherwise hidden until you release it)</span></label>' +
-        exitsField('xExits', 3) +
+        navField('xNav', 'ALL') + exitsField('xExits', 3) +
         columnPicker(data.columns, 'x', { max: false, scored: data.scoredColumns || [] }) + siblingChecks(data.siblings) +
         '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="xCreate">Create exam</button></div></div></details>';
     }
@@ -2120,7 +2195,7 @@ function manageExams(section) {
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
         (e.showScore === 'IMMEDIATE' ? '<span class="badge">score shown at once</span>' : (e.released ? '<span class="badge green">released</span>' : '<span class="badge gold">not released</span>')) +
         '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · ' + (e.reexam ? 're-exam of' : 'column') + ' “' + esc(e.columnName) + '”' + (e.reexam ? ' (keeps the higher score)' : '') +
-        ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + '</div>' +
+        ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + ' · ' + navLabel(e.navigation) + '</div>' +
         '<div class="small" style="margin-top:3px">' + e.counts.submitted + ' / ' + e.counts.students + ' submitted · ' + (e.counts.started - e.counts.submitted) + ' in progress</div></div>' +
         '<div class="file-acts"><button class="btn sm primary" data-res="' + esc(e.id) + '">Results</button>' +
         '<button class="btn sm" data-xedit="' + esc(e.id) + '">Edit</button>' +
@@ -2151,6 +2226,7 @@ function manageExams(section) {
         title: $('#xTitle', M.body).value.trim(), blueprint: bp, duration: Number($('#xDur', M.body).value),
         opensAt: fromLocalInput($('#xOpen', M.body).value), closesAt: fromLocalInput($('#xClose', M.body).value),
         showScore: $('#xShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#xExits', M.body).value) || 0,
+        navigation: $('#xNav', M.body).value,
         column: readColumn(M.body, 'x'), alsoSectionIds: checkedSiblings(M.body)
       };
       if (!p.title) { toast('Give the exam a title.', 'error'); return; }
@@ -2178,7 +2254,7 @@ function manageExams(section) {
       '<div class="field"><label>Opens</label><input type="datetime-local" id="eOpen" value="' + esc(toLocalInput(e.opensAt)) + '"></div>' +
       '<div class="field"><label>Closes</label><input type="datetime-local" id="eClose" value="' + esc(toLocalInput(e.closesAt)) + '"></div></div>' +
       '<label class="check"><input type="checkbox" id="eShow"' + (e.showScore === 'IMMEDIATE' ? ' checked' : '') + '> Show students their score right after submitting</label>' +
-      exitsField('eExits', e.maxExits || 0) +
+      navField('eNav', e.navigation) + exitsField('eExits', e.maxExits || 0) +
       '<p class="tiny faint">The questions can’t be changed after creating the exam. To use a different set, remove it and create a new one.</p>' +
       '<div class="row" style="margin-top:12px"><div class="spacer"></div><button class="btn primary" id="eSave">Save</button></div>';
     $('#xBack', M.body).addEventListener('click', function () { list(); });
@@ -2186,7 +2262,8 @@ function manageExams(section) {
       run('admin.exam.update', {
         id: e.id, title: $('#eTitle', M.body).value.trim(), duration: Number($('#eDur', M.body).value),
         opensAt: fromLocalInput($('#eOpen', M.body).value), closesAt: fromLocalInput($('#eClose', M.body).value),
-        showScore: $('#eShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#eExits', M.body).value) || 0
+        showScore: $('#eShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#eExits', M.body).value) || 0,
+        navigation: $('#eNav', M.body).value
       }, 'Saved.').then(list);
     });
   }

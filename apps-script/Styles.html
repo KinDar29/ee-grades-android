@@ -557,6 +557,12 @@ label.check input { width: auto; margin: 0; }
 .exam-timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 2px 10px; border-radius: 8px; background: var(--green-100); color: var(--green-800); }
 .exam-timer.low { background: var(--danger-bg); color: var(--danger); }
 .exam-q { margin-bottom: 12px; }
+.exam-q.exam-q-off { display: none; }
+.exam-nav { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; }
+.exam-dots { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 40px; }
+.exam-dot { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer; padding: 0; }
+.exam-dot.done { background: var(--green-100); border-color: var(--green-600); }
+.exam-dot.here { outline: 2px solid var(--green-600); outline-offset: 1px; font-weight: 700; }
 .exam-qn { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
 .exam-text { white-space: pre-wrap; font-size: 15.5px; line-height: 1.55; margin-bottom: 10px; }
 .exam-img img { max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff; margin-bottom: 10px; }
