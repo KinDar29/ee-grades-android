@@ -500,6 +500,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   The hourly trigger (`scheduledRosterSync`) is still NOT installed — the
   project has 0 triggers, so exam scores copy only on Results/Release. The
   owner must run `installTriggers()` in the editor once.
-- **2026-11-17 23:20** — (not deployed yet) "⇩ Copy scores" per exam and
+- **2026-11-17 23:17** — Portal deployment version 30: "⇩ Copy scores" per exam and
   "⇩ Copy all scores to class record" in 🧪 Exams. Owner decided against the
   hourly trigger; the project has 0 triggers and stays that way.
