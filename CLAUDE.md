@@ -477,6 +477,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   to the module" wording removed (14 items, classification items say "by the
   valence-electron rule"). Written with the Sheets API into rows pre-set to
   plain text, then read back: identical. Bank: 900 items.
-- **2026-11-17** — Saved in the editor, NOT deployed yet: exam "Questions
+- **2026-11-17 21:33** — Portal deployment version 27: exam "Questions
   shown" setting (all on one page / one at a time / one at a time with no
   going back, enforced on the server).
