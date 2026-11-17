@@ -40,7 +40,7 @@ SCHEMA[EXAMS.BANK_TAB] = ['Subject ID', 'Spreadsheet ID', 'Created At'];
 SCHEMA[EXAMS.TAB] = [
   'Exam ID', 'Section ID', 'Title', 'Assessment ID', 'Bank ID', 'Blueprint', 'Items',
   'Duration Minutes', 'Opens At', 'Closes At', 'Show Score', 'Released',
-  'Pool File ID', 'Created At', 'Created By', 'Max Exits', 'Re-exam', 'Original Scores', 'Navigation'
+  'Pool File ID', 'Created At', 'Created By', 'Max Exits', 'Re-exam', 'Original Scores', 'Navigation', 'Re-exam Credit'
 ];
 SCHEMA[EXAMS.ATTEMPTS] = ['Attempt ID', 'Exam ID', 'Section ID', 'Student ID', 'Started At', 'Deadline', 'Questions'];
 SCHEMA[EXAMS.RESULTS] = [
@@ -206,8 +206,23 @@ function examOut_(r) {
     poolFileId: str_(r['Pool File ID']),
     maxExits: Math.max(0, Math.round(num_(r['Max Exits']) || 0)),
     reexam: str_(r['Re-exam']) === 'HIGHER',
+    reexamCredit: credit_(r['Re-exam Credit']),
     navigation: navigation_(r['Navigation'])
   };
+}
+
+/** Re-exam credit: % of the re-exam score that counts (1–100, blank = 100). */
+function credit_(v) {
+  var n = num_(v);
+  if (n === null) return 100;
+  return Math.max(1, Math.min(100, Math.round(n * 100) / 100));
+}
+
+function creditIn_(v) {
+  var n = num_(v);
+  if (n === null) return 100;
+  if (n < 1 || n > 100) throw new Error('Set the re-exam credit between 1% and 100%.');
+  return Math.round(n * 100) / 100;
 }
 
 /** How questions are shown: ALL on one page, ONE at a time, or NOBACK (one at a time, no going back). */
@@ -389,7 +404,8 @@ function createExam_(session, p) {
         'Duration Minutes': duration, 'Opens At': "'" + opens, 'Closes At': "'" + closes,
         'Show Score': p.showScore === 'IMMEDIATE' ? 'IMMEDIATE' : 'RELEASED', 'Released': 'FALSE',
         'Pool File ID': poolId, 'Created At': nowStamp_(), 'Created By': session.id, 'Max Exits': maxExits,
-        'Re-exam': reexam ? 'HIGHER' : '', 'Original Scores': original, 'Navigation': navigation_(p.navigation)
+        'Re-exam': reexam ? 'HIGHER' : '', 'Original Scores': original, 'Navigation': navigation_(p.navigation),
+        'Re-exam Credit': reexam ? creditIn_(p.reexamCredit) : ''
       });
     });
     logAction_(session.id, session.role, 'EXAM_CREATE', sec.id, { title: title, items: items, sections: targets.join(',') });
@@ -418,6 +434,7 @@ function updateExam_(session, p) {
     if (p.showScore !== undefined) patch['Show Score'] = p.showScore === 'IMMEDIATE' ? 'IMMEDIATE' : 'RELEASED';
     if (p.maxExits !== undefined) patch['Max Exits'] = maxExits_(p.maxExits);
     if (p.navigation !== undefined) patch['Navigation'] = navigation_(p.navigation);
+    if (p.reexamCredit !== undefined && str_(row['Re-exam']) === 'HIGHER') patch['Re-exam Credit'] = creditIn_(p.reexamCredit);
     updateObject_(sh, row._row, patch);
     logAction_(session.id, session.role, 'EXAM_UPDATE', p.sectionId, { id: p.id, fields: Object.keys(patch).join(',') });
     return adminExams_(session, p.sectionId);
@@ -499,7 +516,11 @@ function syncExamScores_(session, exam) {
   var col = findAssessmentFor_(data, exam.assessmentId, '');
   if (!col) return 0;
   var rec = examRecords_(exam.id);
-  var changes = [];
+  var changes = [], snap = null;
+  if (exam.reexam) {
+    var exRow = findRow_(tab_(EXAMS.TAB), 'Exam ID', exam.id);
+    try { snap = JSON.parse(str_(exRow && exRow['Original Scores']) || '{}'); } catch (err) { snap = {}; }
+  }
   data.roster.forEach(function (s) {
     var r = rec.results[s.studentId.toLowerCase()];
     if (!r) return;
@@ -508,8 +529,14 @@ function syncExamScores_(session, exam) {
     var cur = s.scores[col.id];
     var blank = cur === null || cur === undefined || cur === '' || isNaN(cur);
     if (exam.reexam) {
-      // keep the higher score: never lower what the column already has
-      if (blank || Number(cur) < value) changes.push({ studentId: s.studentId, assessmentId: col.id, value: value });
+      // re-exam: only part of the score counts (credit %), and the student keeps
+      // whichever is higher — the original score (kept at creation) or the
+      // credited re-exam score. Recomputed every time, so a changed credit applies.
+      var credited = round_(value * exam.reexamCredit / 100, 2);
+      var k = s.studentId.toLowerCase();
+      var orig = snap && snap.hasOwnProperty(k) ? Number(snap[k]) : null;
+      var target = orig === null ? credited : Math.max(orig, credited);
+      if (blank || Number(cur) !== target) changes.push({ studentId: s.studentId, assessmentId: col.id, value: target });
       return;
     }
     if (blank || Number(cur) !== value) {
