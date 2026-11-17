@@ -509,3 +509,8 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 23:32** — Portal deployment version 31: class record reloads after the
   Exams window closes if scores were copied; "⇩ Copy for all sections"; re-exam
   credit % can be set for the same exam in every section at once.
+- **2026-11-17 23:45** — Data only: EE121 workbook **Final Grade** tab, column
+  "Final average (%)" (H9:H208) is now `ROUND(80% lecture + 20% lab, 0)`, so
+  the final grade and remark come from the whole-number average (owner's rule:
+  49.5 → 50 → 3.00 PASSED). Lecture grade (column F) still looks up the
+  unrounded lecture average.
