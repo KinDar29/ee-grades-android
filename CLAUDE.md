@@ -99,8 +99,10 @@ change log at the bottom for every change you ship.
   attainment is per section too, survey responders mapped to sections by
   student number, lab-only CO statements (CO4) dropped.
 - `CourseAssessment.js` + `CadsAssets.js` — **Course Assessment Data Sheet**
-  (button "⬇ Course Assessment Data Sheet" on the Indirect tab; needs a section
-  picked): `admin.cads {sectionId}` returns the parsed workbook, the section,
+  (own admin tab "Course Assessment Data Sheet", `renderCadsTab` /
+  `cadsPreview` in App.html: pick a section → CO attainment table and the
+  comments / analysis / CQI exactly as the PDF will start, ↻ Refresh =
+  `fresh`, ⬇ Download PDF): `admin.cads {sectionId}` returns the parsed workbook, the section,
   signatories (instructor from Setup; Chair/Dean = Settings
   `SUMMARY_CHAIR_NAME` / `SUMMARY_DEAN_NAME`, defaults Rigor G. Gabur / Sharona
   Q. Barroga) and the College header/footer images (`CADS_ASSETS`, taken from
@@ -480,3 +482,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 21:33** — Portal deployment version 27: exam "Questions
   shown" setting (all on one page / one at a time / one at a time with no
   going back, enforced on the server).
+- **2026-11-17 21:59** — Portal deployment version 28: separate "Course
+  Assessment Data Sheet" tab with an on-screen preview (button removed from
+  the Indirect tab).
