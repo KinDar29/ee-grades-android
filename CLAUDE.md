@@ -113,6 +113,13 @@ change log at the bottom for every change you ship.
   from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
+  Class record also has Final Average (Setup's lecture/lab shares, 80/20),
+  Final Grade (1.00–5.00) — both from the workbook's **Final Grade** tab, blank
+  until the lab instructor's averages are pasted there — and Remarks (single-
+  line PDF fields): INCOMPLETE / DROPPED from the class sheet's Final Status
+  tab, else PASSED (≤ 3.00), CONDITIONAL (4.00), FAILED (5.00). The class
+  record piece is drawn 800 px wide and scaled to the page; field font sizes
+  follow the HTML (`px × scale`).
 - `DirectAssessment.js` — admin "Direct assessment" tab (`admin.direct`,
   `admin.direct.refresh`): every class's requirements + per-student scores,
   percent, grade and standing for a semester, cached 5 min per class
@@ -425,3 +432,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   per-section **Course Assessment Data Sheet** PDF (`CourseAssessment.js`,
   `CadsAssets.js`). Verified: `checkIndirectAssessment()` on the live workbook
   = workbook Comparison tab (CO1 92.94/13.48, CO2 80/20.69, CO3 71.76/94.25).
+- **2026-11-17** — Portal deployment version 25: Course Assessment Data Sheet
+  class record gains Final Average (lecture 80% + lab 20%), Final Grade and
+  editable Remarks (PASSED / CONDITIONAL / FAILED / INCOMPLETE / DROPPED).

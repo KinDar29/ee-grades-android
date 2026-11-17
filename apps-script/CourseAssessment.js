@@ -55,7 +55,7 @@ function cwCell_(v, r, c) { return r >= 0 && r < v.length && c < v[r].length ? s
 function readCourseWorkbook_(ss) {
   var T = COURSE_WB.TABS;
   var out = {
-    title: ss.getName(), url: ss.getUrl(), info: {}, target: 70, cos: [], components: [], ied: {},
+    title: ss.getName(), url: ss.getUrl(), info: {}, target: 70, finalShares: null, cos: [], components: [], ied: {},
     units: [], plan: [], direct: { cos: [], students: [] }, indirect: { students: [] },
     statements: [], scale: [], updated: nowStamp_()
   };
@@ -67,7 +67,10 @@ function readCourseWorkbook_(ss) {
   su.forEach(function (r) {
     for (var j = 0; j < r.length - 1; j++) {
       var k = str_(r[j]).toLowerCase();
-      if (k && str_(r[j + 1]) && label[k] === undefined) label[k] = str_(r[j + 1]);
+      if (!k || label[k] !== undefined) continue;
+      for (var q = j + 1; q < Math.min(r.length, j + 4); q++) {
+        if (str_(r[q])) { label[k] = str_(r[q]); break; }
+      }
     }
   });
   out.info = {
@@ -85,6 +88,7 @@ function readCourseWorkbook_(ss) {
     if (!/^CO\d+$/i.test(cwCell_(su, i, 1))) { if (cwCell_(su, i, 2) === 'Total' || !cwCell_(su, i, 1)) break; continue; }
     out.cos.push({ co: cwCell_(su, i, 1).toUpperCase(), text: cwCell_(su, i, 2), weight: cwCell_(su, i, 3) });
   }
+  out.finalShares = { lecture: label['lecture share (auto)'] || '80%', lab: label['laboratory share (auto)'] || '20%' };
   var gHead = rowWhere_(su, function (r) { return str_(r[1]) === 'Code' && str_(r[2]) === 'Component'; });
   for (var g = gHead + 1; gHead >= 0 && g < su.length; g++) {
     var code = cwCell_(su, g, 1);
@@ -119,9 +123,20 @@ function readCourseWorkbook_(ss) {
   if (fh >= 0) {
     var H = fg[fh].map(function (x) { return str_(x); });
     var cn = H.indexOf('Student name'), ci = H.indexOf('Student no.'), cs = H.indexOf('Section');
+    var col = function (re) { for (var q = 0; q < H.length; q++) if (re.test(H[q])) return q; return -1; };
+    var cLa = col(/^lecture average/i), cLg = col(/^lecture grade/i), cLab = col(/^lab final average/i),
+      cFa = col(/^final average/i), cFg = col(/^final grade/i), cRm = col(/^remark/i);
     for (var f = fh + 1; f < fg.length; f++) {
       var nm = cwCell_(fg, f, cn);
-      if (nm) who[studentKey_(nm)] = { id: cwCell_(fg, f, ci), section: cwCell_(fg, f, cs) };
+      if (!nm) continue;
+      who[studentKey_(nm)] = {
+        id: cwCell_(fg, f, ci), section: cwCell_(fg, f, cs),
+        final: {
+          lectureAverage: cwNum_(cwCell_(fg, f, cLa)), lectureGrade: cwNum_(cwCell_(fg, f, cLg)),
+          labAverage: cwNum_(cwCell_(fg, f, cLab)), average: cwNum_(cwCell_(fg, f, cFa)),
+          grade: cwNum_(cwCell_(fg, f, cFg)), remark: cwCell_(fg, f, cRm)
+        }
+      };
     }
   }
 
@@ -150,7 +165,8 @@ function readCourseWorkbook_(ss) {
   var sRow = rowWhere_(dv, function (r) { return str_(r[1]) === 'Student'; });
   for (var s = sRow + 1; sRow >= 0 && s < dv.length && cwCell_(dv, s, 1); s++) {
     var name = cwCell_(dv, s, 1), w = who[studentKey_(name)] || {};
-    var st = { name: name, id: w.id || '', section: w.section || '', tasks: {}, co: {}, total: totalCol >= 0 ? cwNum_(dv[s][totalCol]) : null };
+    var st = { name: name, id: w.id || '', section: w.section || '', tasks: {}, co: {}, total: totalCol >= 0 ? cwNum_(dv[s][totalCol]) : null,
+      final: w.final || null };
     dcols.forEach(function (c) {
       st.tasks[c.co] = c.tasks.map(function (t) { return cwNum_(dv[s][t.col]); });
       st.co[c.co] = cwNum_(dv[s][c.pctCol]);
@@ -278,6 +294,10 @@ function courseAssessmentSheet_(session, sectionId, fresh) {
   var key = sectionKey_(sec.name);
   var mine = course.direct.students.filter(function (s) { return sectionKey_(s.section) === key; });
   if (!mine.length) throw new Error('No student of ' + sec.name + ' was found on the workbook\'s Final Grade tab.');
+  // INC / Dropped set in the portal gradebook (class sheet "Final Status" tab)
+  var statuses = {};
+  try { statuses = readFinalStatuses_(openSectionFile_(sec.id).ss); } catch (err) { console.warn('final status: ' + err); }
+  mine.forEach(function (st) { st.status = statuses[str_(st.id).toLowerCase()] || ''; });
   var s = settings_();
   logAction_(session.id, session.role, 'CADS_DOWNLOAD', sec.id, { workbook: sec.workbookId });
   return {
