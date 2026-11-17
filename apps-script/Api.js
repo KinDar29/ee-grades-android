@@ -219,7 +219,7 @@ function route_(action, p, token) {
     case 'admin.exam.release':
       return releaseExam_(requireSession_(token, 'admin'), p.sectionId, p.examId);
     case 'admin.exam.sync':
-      return syncExamNow_(requireSession_(token, 'admin'), p.sectionId, p.examId);
+      return syncExamNow_(requireSession_(token, 'admin'), p.sectionId, p.examId, p.allSections === true || p.allSections === 'true');
     case 'admin.exam.reset':
       return resetExamAttempt_(requireSession_(token, 'admin'), p.sectionId, p.examId, p.studentId);
     case 'admin.direct':

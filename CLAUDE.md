@@ -193,8 +193,9 @@ change log at the bottom for every change you ship.
   (`finalizeExpired_`). Scores reach the gradebook only via
   `syncExamScores_` (on Release, on opening Results, and the admin's
   "⇩ Copy scores" / "⇩ Copy all scores to class record" buttons in 🧪 Exams →
-  `admin.exam.sync` / `syncExamNow_`; unreleased RELEASED-mode exams are
-  skipped and named), scaled to the column max. **No hourly trigger** (owner's
+  `admin.exam.sync` / `syncExamNow_`; "⇩ Copy for all sections" =
+  `allSections` → this class + `siblingSections_`; unreleased RELEASED-mode
+  exams are skipped and named), scaled to the column max. **No hourly trigger** (owner's
   choice, to keep the system fast) — don't run `installTriggers()` unless the
   owner asks.
   Admin: "🧪 Exams" → bank status/link, new exam, Results (status, score,
@@ -227,7 +228,9 @@ change log at the bottom for every change you ship.
   Reset attempt puts the student's original score back. **Re-exam credit** (Exams
   `Re-exam Credit`, 1–100, blank = 100; `credit_` / `creditIn_`): the column
   gets max(original from `Original Scores`, re-exam score × credit%),
-  recomputed on every sync, so changing the credit in Edit re-applies (up or
+  recomputed on every sync (Edit's "Use this percentage … in every section",
+  `creditAllSections`, sets it on the same-titled re-exam in every sibling
+  section), so changing the credit in Edit re-applies (up or
   down, never below the original); manual edits to a re-exam taker's cell
   are overwritten by the next sync. Web portal only — the Android app doesn't show
   assignments or exams yet.
@@ -503,3 +506,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 23:17** — Portal deployment version 30: "⇩ Copy scores" per exam and
   "⇩ Copy all scores to class record" in 🧪 Exams. Owner decided against the
   hourly trigger; the project has 0 triggers and stays that way.
+- **2026-11-17 23:32** — Portal deployment version 31: class record reloads after the
+  Exams window closes if scores were copied; "⇩ Copy for all sections"; re-exam
+  credit % can be set for the same exam in every section at once.
