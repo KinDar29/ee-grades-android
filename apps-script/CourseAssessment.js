@@ -134,7 +134,9 @@ function readCourseWorkbook_(ss) {
         final: {
           lectureAverage: cwNum_(cwCell_(fg, f, cLa)), lectureGrade: cwNum_(cwCell_(fg, f, cLg)),
           labAverage: cwNum_(cwCell_(fg, f, cLab)), average: cwNum_(cwCell_(fg, f, cFa)),
-          grade: cwNum_(cwCell_(fg, f, cFg)), remark: cwCell_(fg, f, cRm)
+          grade: cwNum_(cwCell_(fg, f, cFg)), remark: cwCell_(fg, f, cRm),
+          // the cells as written, for INC / DROPPED in place of a number
+          labText: cwCell_(fg, f, cLab), gradeText: cwCell_(fg, f, cFg)
         }
       };
     }

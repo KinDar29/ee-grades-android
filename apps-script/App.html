@@ -2932,17 +2932,20 @@ function downloadIndirectPdf(r, btn) {
 }
 
 /* ----------------------- Course Assessment Data Sheet ----------------------- */
-/*  One section's CO assessment report on 8.5 x 13 in pages, laid out like the
-    College's Program Assessment Data Sheet (header/footer images, green and
-    yellow tables). Data: admin.cads (CourseAssessment.js) = the workbook's
+/*  One section's CO assessment report on A4 pages printed on the College of
+    Engineering letterhead (CADS_ASSETS.page, drawn behind every page), gray
+    tables so it prints well in black and white. Data: admin.cads (CourseAssessment.js) = the workbook's
     department-template tabs. Each piece is drawn off-screen, captured as an
     image and placed on the page; the comment, analysis and CQI cells become
     PDF text fields carrying the written text, so they can be changed in any
     PDF reader before printing.                                                 */
 
 var CADS = {
-  GREEN: '#92D050', YELLOW: '#FFFF00', GREY: '#808080', BLUE: '#4472C4', ORANGE: '#ED7D31',
-  PAGE_W: 612, PAGE_H: 936, MARGIN: 72, TOP: 112, BOTTOM: 96, PX: 624   // 624 css px = 468 pt (6.5 in)
+  // gray only (owner's request): light gray headings, darker gray highlights
+  GREEN: '#D9D9D9', YELLOW: '#BFBFBF', GREY: '#595959', BLUE: '#404040', ORANGE: '#A6A6A6', BAND: '#EDEDED',
+  // A4 like the letterhead; content stays inside 1-inch side margins, below the
+  // letterhead's logos (top 15%) and above its artwork (bottom 13%)
+  PAGE_W: 595.28, PAGE_H: 841.89, MARGIN: 72, TOP: 140, BOTTOM: 138, PX: 624   // 624 css px = 451 pt
 };
 
 var CADS_CSS =
@@ -2959,8 +2962,10 @@ var CADS_CSS =
   '.cads .h1 u,.cads .h2 u{text-underline-offset:2px}' +
   '.cads .h2{font-weight:700;font-size:14.5px;margin:6px 0 8px 48px}' +
   '.cads .note{font-style:italic;font-size:11px;color:#555;margin-top:4px}' +
-  '.cads .small td,.cads .small th{font-size:9.3px;padding:1px 2px;line-height:1.15}' +
-  '.cads .banner{font-family:Cambria,Caladea,Georgia,serif;font-weight:700;text-align:center;font-size:10px;line-height:1.35}' +
+  '.cads .small td,.cads .small th{font-size:10.6px;padding:2px 3px;line-height:1.2}' +
+  '.cads table.rec{table-layout:fixed}.cads .rec td,.cads .rec th{font-size:11px;padding:2px 1px;line-height:1.2;overflow:hidden}' +
+  '.cads .rec th{font-size:9px;line-height:1.1}.cads .rec tr.at td{font-size:8.6px}.cads .rec td:nth-child(2){font-size:10px;white-space:nowrap;text-overflow:ellipsis;padding-left:3px}' +
+  '.cads .banner{font-weight:700;text-align:center;font-size:11.5px;line-height:1.35;padding:4px}' +
   '.cads .fld{font-family:Helvetica,Arial,sans-serif;font-size:12.6px;line-height:1.25;vertical-align:top;white-space:pre-wrap}' +
   '.cads .fld.hide{color:transparent}' +
   '.cads .chart{border:1px solid #d9d9d9}' +
@@ -2968,6 +2973,10 @@ var CADS_CSS =
   '.cads .body{text-align:justify;font-size:14px}';
 
 function cadsNum(v, d) { return v === null || v === undefined || isNaN(v) ? '' : Number(v).toFixed(d === undefined ? 2 : d); }
+/** Score for the class record: up to 2 decimals, no trailing zeros (73.5, 66.67, 100). */
+function cadsN(v) { return v === null || v === undefined || isNaN(v) ? '' : String(Math.round(Number(v) * 100) / 100); }
+/** "15.00%" -> "15%", "11.25%" stays: weights in the class record header. */
+function cadsPctText(t) { return String(t || '').replace(/\.0+%$/, '%').replace(/(\.\d*?)0+%$/, '$1%'); }
 function cadsPct(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100) + '%'; }
 
 /** Section numbers: per-student rows, counts at the target, comments. */
@@ -3008,6 +3017,9 @@ function cadsModel(r) {
 function cadsRemark(s) {
   if (s.status === 'INC') return 'INCOMPLETE';
   if (s.status === 'Dropped') return 'DROPPED';
+  var gt = String(s.final && s.final.gradeText || '').toUpperCase();
+  if (/^INC/.test(gt)) return 'INCOMPLETE';
+  if (/DROP/.test(gt)) return 'DROPPED';
   var g = s.final ? s.final.grade : null;
   if (g === null || g === undefined) return '';
   return g <= 3 ? 'PASSED' : (g < 5 ? 'CONDITIONAL' : 'FAILED');
@@ -3110,11 +3122,11 @@ function cadsPieces(m, tx) {
   // I. course information
   add('<div class="title">COURSE ASSESSMENT DATA SHEET</div>' +
     '<div class="h1"><span>I.</span><u>COURSE INFORMATION</u></div>' +
-    '<table style="width:86%;margin-left:14%"><tbody>' +
+    '<table><tbody>' +
     [['COURSE CODE', info.courseCode], ['COURSE TITLE', info.courseTitle], ['COURSE AND YEAR', sec.name],
       ['SEMESTER / S.Y.', semLine], ['INSTRUCTOR', info.instructor], ['NUMBER OF STUDENTS', String(m.students.length)],
       ['ATTAINMENT TARGET', T + '% CO attainment per student (passing)']]
-      .map(function (r) { return '<tr><td style="width:36%">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') +
+      .map(function (r) { return '<tr><td class="b" style="width:34%;background:' + CADS.BAND + '">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') +
     '</tbody></table>');
 
   // II.A plan
@@ -3125,15 +3137,14 @@ function cadsPieces(m, tx) {
   var name = {};
   c.components.forEach(function (x) { name[x.code] = x.name; });
   var hours = c.units.reduce(function (a, u) { return a + (Number(u.hours) || 0); }, 0);
-  add('<table style="border:0"><tr><td style="border:0;padding:0;width:52%;vertical-align:top">' +
-    '<table><thead><tr class="g"><th colspan="3">GRADING SYSTEM</th></tr><tr class="g"><th>Code</th><th>Assessment Task</th><th>%</th></tr></thead><tbody>' +
+  add('<table><thead><tr class="g"><th colspan="3">GRADING SYSTEM</th></tr><tr class="g"><th style="width:14%">Code</th><th>Assessment Task</th><th style="width:16%">%</th></tr></thead><tbody>' +
     c.components.map(function (x) { return '<tr><td class="c">' + esc(x.code) + '</td><td>' + esc(x.name) + '</td><td class="c">' + esc(x.weight) + '</td></tr>'; }).join('') +
-    '<tr><td></td><td class="b">Total</td><td class="c b">100%</td></tr></tbody></table></td>' +
-    '<td style="border:0;padding:0 0 0 14px;vertical-align:top">' + (c.units.length
-      ? '<table><thead><tr class="g"><th colspan="3">TIME</th></tr><tr class="g"><th>Unit</th><th>CO</th><th>Hours</th></tr></thead><tbody>' +
-        c.units.map(function (u) { return '<tr><td class="c">' + esc(u.unit) + '</td><td class="c">' + esc(u.co) + '</td><td class="c">' + esc(u.hours) + '</td></tr>'; }).join('') +
-        '<tr><td class="c b" colspan="2">Total</td><td class="c b">' + hours + '</td></tr></tbody></table>' : '') +
-    '</td></tr></table>');
+    '<tr><td></td><td class="b">Total</td><td class="c b">100%</td></tr></tbody></table>');
+  if (c.units.length) add('<table><thead><tr class="g"><th colspan="' + (c.units.length + 2) + '">TIME</th></tr></thead><tbody>' +
+    '<tr><td class="b" style="width:14%;background:' + CADS.GREEN + '">Unit</td>' + c.units.map(function (u) { return '<td class="c">' + esc(String(u.unit).replace(/^unit\s*/i, '')) + '</td>'; }).join('') + '<td class="c b">Total</td></tr>' +
+    '<tr><td class="b" style="background:' + CADS.GREEN + '">CO</td>' + c.units.map(function (u) { return '<td class="c">' + esc(u.co) + '</td>'; }).join('') + '<td></td></tr>' +
+    '<tr><td class="b" style="background:' + CADS.GREEN + '">Hours</td>' + c.units.map(function (u) { return '<td class="c">' + esc(u.hours) + '</td>'; }).join('') + '<td class="c b">' + hours + '</td></tr>' +
+    '</tbody></table>');
   var groups = [], cur = null;
   c.plan.forEach(function (p) { if (p.co || !cur) { cur = { co: p.co, total: p.coTotal, rows: [] }; groups.push(cur); } cur.rows.push(p); });
   add('<table><thead><tr class="g"><th style="width:9%">CO</th><th>Assessment Task</th><th style="width:9%">I/E/D</th><th style="width:9%">C/P/A</th><th style="width:16%">% of grade (%AT)</th><th style="width:13%">CO total</th></tr></thead><tbody>' +
@@ -3144,34 +3155,45 @@ function cadsPieces(m, tx) {
           '<td class="c">' + esc(p.cpa) + '</td><td class="c">' + esc(p.weight) + '</td>' +
           (i ? '' : '<td class="c" rowspan="' + g.rows.length + '">' + esc(g.total) + '</td>') + '</tr>';
       }).join('');
-    }).join('') + '<tr><td colspan="4" style="border:0"></td><td class="c b">Total</td><td class="c b">100.0%</td></tr></tbody></table>' +
+    }).join('') + '<tr><td colspan="4" class="b" style="text-align:right">Total</td><td class="c b">100.0%</td><td></td></tr></tbody></table>' +
     '<div class="note">I = Introduced, E = Enhanced, D = Demonstrated · C = Cognitive, P = Psychomotor, A = Affective.</div>');
 
   // II.B class record (chunks of 30 students, header repeated)
   var dcos = c.direct.cos;
-  var banner = function (what) {
-    return '<tr class="g"><td colspan="99" class="banner">MARIANO MARCOS STATE UNIVERSITY<br>' + esc(info.college) + '<br>' + esc(info.department) +
-      '<br><br>Course Outcome Assessment<br>' + what + '<br><span style="font-weight:400">' + esc(info.courseCode + ' ' + info.courseTitle + ' · ' + sec.name + ' · ' + semLine) + '</span></td></tr>';
+  var banner = function (what, span) {
+    return '<tr class="g"><td colspan="' + span + '" class="banner">Course Outcome Assessment · ' + what + '<br><span style="font-weight:400">' +
+      esc(info.department + ' · ' + info.courseCode + ' ' + info.courseTitle + ' · ' + sec.name + ' · ' + semLine) + '</span></td></tr>';
   };
-  var recHead = banner('Direct Assessment') +
-    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attainment</th>' +
-    '<th rowspan="4">Final Average (Lec ' + esc(m.lecShare) + ' + Lab ' + esc(m.labShare) + ')</th><th rowspan="4">Final Grade</th><th rowspan="4" style="width:82px">Remarks</th></tr>' +
+  var recCols = 2 + dcos.reduce(function (a, d) { return a + d.tasks.length + 1; }, 0) + 5;
+  var recHead = banner('Direct Assessment', recCols) +
+    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO (Lecture)</th>' +
+    '<th rowspan="4">Lab Grade (%)</th><th rowspan="4">Final Ave. (Lec ' + esc(m.lecShare) + ' + Lab ' + esc(m.labShare) + ')</th><th rowspan="4">Final Grade</th><th rowspan="4">Remarks</th></tr>' +
     '<tr class="g"><th>%CO</th>' + dcos.map(function (d) { return '<td class="c" colspan="' + (d.tasks.length + 1) + '">' + esc(d.weight) + '</td>'; }).join('') + '</tr>' +
     '<tr class="g"><th>ASSESSMENT TASK</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<th>' + esc(t.task) + '</th>'; }).join('') + '<th class="y">%' + esc(d.co) + '</th>'; }).join('') + '</tr>' +
-    '<tr class="g"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(t.weight) + '</td>'; }).join('') + '<td class="c y">' + esc(d.pctWeight) + '</td>'; }).join('') + '</tr>' +
-    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td><td class="c">100</td><td class="c">1.00–5.00</td><td></td></tr>';
-  rowsOf(m.students, 45).forEach(function (chunk, ci) {
+    '<tr class="g at"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(cadsPctText(t.weight)) + '</td>'; }).join('') + '<td class="c y">' + esc(cadsPctText(d.pctWeight)) + '</td>'; }).join('') + '</tr>' +
+    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td><td class="c">100</td><td class="c">100</td><td class="c">1.00–5.00</td><td></td></tr>';
+  var REC = 36, recChunks = rowsOf(m.students, REC);
+  var orText = function (v, t) {   // number, or the workbook's text shortened to fit (INC / DRP)
+    if (v !== null && v !== undefined && !isNaN(v)) return cadsN(v);
+    t = String(t || '').toUpperCase();
+    return /^INC/.test(t) ? 'INC' : (/DROP/.test(t) ? 'DRP' : '');
+  };
+  recChunks.forEach(function (chunk, ci) {
     add((ci ? '' : '<div class="h2">B.&nbsp; <u>Course Outcome Assessment Class Record</u></div>') +
-      '<table class="small rec"><colgroup><col style="width:24px"><col style="width:158px"></colgroup>' + recHead + chunk.map(function (s, i) {
-        return '<tr><td class="c">' + (ci * 45 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
-          return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsNum(v) + '</td>'; }).join('') + '<td class="c y">' + cadsNum(s.co[d.co]) + '</td>';
-        }).join('') + '<td class="c y">' + cadsNum(s.total) + '</td>' +
-          '<td class="c">' + cadsNum(s.final && s.final.average) + '</td><td class="c b">' + cadsNum(s.final && s.final.grade) + '</td>' +
-          '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:9.3px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
+      '<table class="rec"><colgroup><col style="width:18px"><col style="width:190px">' + dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:30px">'); }).join('') +
+      '<col style="width:34px"><col style="width:32px"><col style="width:34px"><col style="width:34px"><col style="width:66px"></colgroup>' + recHead + chunk.map(function (s, i) {
+        var f = s.final || {};
+        return '<tr><td class="c">' + (ci * REC + i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
+          return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsN(v) + '</td>'; }).join('') + '<td class="c y">' + cadsN(s.co[d.co]) + '</td>';
+        }).join('') + '<td class="c y">' + cadsN(s.total) + '</td>' +
+          '<td class="c">' + orText(f.labAverage, f.labText) + '</td>' +
+          '<td class="c">' + cadsN(f.average) + '</td><td class="c b">' + (f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
+          '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:9px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
       }).join('') + '</table>' +
-      (ci === Math.ceil(m.students.length / 45) - 1 ? '<div class="note">Blank = no score recorded yet (left out, the same as the portal’s running grade). ' +
+      (ci === recChunks.length - 1 ? '<div class="note">Blank = no score recorded yet (left out, the same as the portal’s running grade). ' +
         'Final average = ' + esc(m.lecShare) + ' lecture (Total %CO Attainment) + ' + esc(m.labShare) + ' laboratory, graded on the workbook’s transmutation table' +
-        (m.waitingLab ? '; ' + m.waitingLab + ' student(s) have no laboratory average yet, so their final grade is blank' : '') + '.</div>' : ''), ci === 0, 800);
+        '. A lecture or laboratory average below 50% gives that failing grade whatever the other is. INC = incomplete, DRP = dropped' +
+        (m.waitingLab ? '; ' + m.waitingLab + ' student(s) have no final grade yet' : '') + '.</div>' : ''), true, 18 + 190 + dcos.reduce(function (a, d) { return a + 30 * (d.tasks.length + 1); }, 0) + 34 + 32 + 34 + 34 + 66);
   });
   var sumTable = function (s) {
     return '<table><tr class="g"><td style="width:40%"></td>' + m.CO.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '<th>All COs</th></tr>' +
@@ -3188,11 +3210,11 @@ function cadsPieces(m, tx) {
   var commentTable = function (prefix, vals, texts) {
     return '<table><tr class="g"><th style="width:34%">Course Outcome</th><th style="width:15%">Attainment</th><th>Comment</th></tr>' +
       c.cos.map(function (x, i) {
-        return '<tr><td>' + esc(x.co + '. ' + x.text) + '</td><td class="c">' + cadsPct(vals[i].pct) + '</td>' + field(prefix + '_' + x.co, texts[i], 130) + '</tr>';
+        return '<tr><td>' + esc(x.co + '. ' + x.text) + '</td><td class="c">' + cadsPct(vals[i].pct) + '</td>' + field(prefix + '_' + x.co, texts[i], 104) + '</tr>';
       }).join('') + '</table>';
   };
   add('<div class="h2">C.&nbsp; <u>Analysis and Graphs</u></div>' +
-    cadsChart('Percentage of Students Achieving CO Attainment of ' + T + '%', m.CO, [{ name: 'Direct', color: CADS.BLUE, values: m.d.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]), true);
+    cadsChart('Percentage of Students Achieving CO Attainment of ' + T + '%', m.CO, [{ name: 'Direct', color: CADS.BLUE, values: m.d.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]));
   add(commentTable('direct_comment', m.d, tx.direct));
 
   // III.A form
@@ -3200,28 +3222,28 @@ function cadsPieces(m, tx) {
   var formRows = [];
   m.CO.forEach(function (k) {
     var co = c.cos.filter(function (x) { return x.co === k; })[0];
-    formRows.push('<tr style="background:#E2EFDA"><td colspan="' + (scale.length + 1) + '" class="b">' + esc(k + '. ' + co.text) + '</td></tr>');
+    formRows.push('<tr style="background:' + CADS.BAND + '"><td colspan="' + (scale.length + 1) + '" class="b">' + esc(k + '. ' + co.text) + '</td></tr>');
     c.statements.filter(function (s) { return s.co === k; }).forEach(function (s) {
       formRows.push('<tr><td>' + esc(s.text) + '</td>' + scale.map(function () { return '<td></td>'; }).join('') + '</tr>');
     });
   });
-  var formHead = '<tr class="g"><th>Assessment Criteria</th>' + scale.map(function (x) { return '<th style="width:11%">' + esc(x.label) + '<br>' + x.n + '</th>'; }).join('') + '</tr>';
-  rowsOf(formRows, 17).forEach(function (chunk, ci) {
+  var formHead = '<tr class="g"><th>Assessment Criteria</th>' + scale.map(function (x) { return '<th style="width:9%">' + esc(x.label) + '<br>' + x.n + '</th>'; }).join('') + '</tr>';
+  rowsOf(formRows, 16).forEach(function (chunk, ci) {
     add((ci ? '' : '<div class="h1"><span>III.</span><u>INDIRECT ASSESSMENT</u></div><div class="h2">A.&nbsp; <u>Indirect Assessment Form</u></div>' +
       '<p class="body">Based on your experience taking this course, activities both synchronous and asynchronous, at what level would you RATE yourself now on the following?</p>') +
       '<table>' + formHead + chunk.join('') + '</table>', ci === 0);
   });
 
   // III.B result
-  var resHead = banner('Indirect Assessment') +
+  var resHead = banner('Indirect Assessment', 2 + m.CO.length * 2 + 1) +
     '<tr class="g"><th style="width:5%">No.</th><th style="text-align:left">Student</th>' + m.CO.map(function (k) { return '<th>' + esc(k) + '<br>rating</th>'; }).join('') +
     m.CO.map(function (k) { return '<th class="y">%' + esc(k) + '</th>'; }).join('') + '<th class="y">%CO</th></tr>' +
     '<tr class="g"><td></td><td>%CO weight</td>' + m.CO.map(function () { return '<td></td>'; }).join('') +
     c.cos.map(function (x) { return '<td class="c y">' + esc(x.weight) + '</td>'; }).join('') + '<td class="c y">100%</td></tr>';
-  rowsOf(m.ind, 34).forEach(function (chunk, ci) {
+  rowsOf(m.ind, 36).forEach(function (chunk, ci) {
     add((ci ? '' : '<div class="h2">B.&nbsp; <u>Indirect Assessment Result</u></div>') + '<table class="small">' + resHead + chunk.map(function (s, i) {
       var none = !m.CO.some(function (k) { return s.ratings[k] !== null && s.ratings[k] !== undefined; });
-      return '<tr><td class="c">' + (ci * 34 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + (none
+      return '<tr><td class="c">' + (ci * 36 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + (none
         ? '<td class="c" colspan="' + (m.CO.length * 2 + 1) + '"><i>no response</i></td>'
         : m.CO.map(function (k) { return '<td class="c">' + cadsNum(s.ratings[k]) + '</td>'; }).join('') +
           m.CO.map(function (k) { return '<td class="c y">' + cadsNum(s.pct[k]) + '</td>'; }).join('') + '<td class="c y">' + cadsNum(s.total) + '</td>') + '</tr>';
@@ -3229,7 +3251,7 @@ function cadsPieces(m, tx) {
   });
   add(sumTable(m.i));
   add('<div class="h2">C.&nbsp; <u>Analysis and Graphs</u></div>' +
-    cadsChart('Course Outcomes Self-Assessment', m.CO, [{ name: 'Indirect', color: CADS.BLUE, values: m.i.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]), true);
+    cadsChart('Course Outcomes Self-Assessment', m.CO, [{ name: 'Indirect', color: CADS.BLUE, values: m.i.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]));
   add(commentTable('indirect_comment', m.i, tx.indirect));
 
   // IV comparison
@@ -3239,17 +3261,17 @@ function cadsPieces(m, tx) {
     '<tr><td class="b">Indirect Assessment</td>' + m.i.map(function (x) { return '<td class="c y">' + x.pct.toFixed(2) + '</td>'; }).join('') + '</tr></table>', true);
   add(cadsChart('CO Attainment', m.CO, [
     { name: 'Direct Assessment', color: CADS.BLUE, values: m.d.slice(0, m.CO.length).map(function (x) { return x.pct; }) },
-    { name: 'Indirect Assessment', color: CADS.ORANGE, values: m.i.slice(0, m.CO.length).map(function (x) { return x.pct; }) }], 290));
+    { name: 'Indirect Assessment', color: CADS.ORANGE, values: m.i.slice(0, m.CO.length).map(function (x) { return x.pct; }) }], 220));
   add(cadsChart('Overall', ['Direct Assessment', 'Indirect Assessment'], [{ name: 'Overall', color: CADS.BLUE,
-    values: [m.d[m.d.length - 1].pct, m.i[m.i.length - 1].pct] }], 240));
+    values: [m.d[m.d.length - 1].pct, m.i[m.i.length - 1].pct] }], 150));
   add('<div class="b" style="margin-bottom:4px">Analysis</div><table style="border:0"><tr>' +
-    field('comparison_analysis', tx.compare.join('\n\n'), 230).replace('<td class="fld', '<td style="border:0" class="fld') + '</tr></table>');
+    field('comparison_analysis', tx.compare.join('\n\n'), 176).replace('<td class="fld', '<td style="border:0" class="fld') + '</tr></table>');
 
   // V CQI + signatures
   add('<div class="h1"><span>V.</span><u>ACTIONS FOR CONTINUOUS QUALITY IMPROVEMENT (CQI)</u></div>' +
     '<table><tr class="g"><th style="width:12%">CO</th><th style="width:38%">Finding</th><th>Action for CQI</th></tr>' +
     tx.cqi.map(function (q) {
-      return '<tr><td class="c b">' + esc(q.co) + '</td>' + field('cqi_finding_' + q.co, q.finding, 128) + field('cqi_action_' + q.co, q.action, 128) + '</tr>';
+      return '<tr><td class="c b">' + esc(q.co) + '</td>' + field('cqi_finding_' + q.co, q.finding, 104) + field('cqi_action_' + q.co, q.action, 104) + '</tr>';
     }).join('') + '</table>', true);
   var sg = m.r.signatories;
   var sig = function (n, role) { return '<div style="border-top:1px solid #000;margin-top:42px;padding-top:2px;text-align:center"><b>' + esc(String(n).toUpperCase()) + '</b><br>' + esc(role) + '</div>'; };
@@ -3295,12 +3317,13 @@ function buildCadsPdf(r) {
         if (!uri) return Promise.resolve(null);
         return /^data:image\/png/.test(uri) ? doc.embedPng(uri) : doc.embedJpg(uri);
       };
-      return Promise.all([embed(A.header), embed(A.footer), doc.embedFont(Pd.StandardFonts.Helvetica)].concat(
+      return Promise.all([embed(A.page), embed(A.page ? null : A.header), embed(A.page ? null : A.footer), doc.embedFont(Pd.StandardFonts.Helvetica)].concat(
         shots.map(function (s) { return doc.embedPng(s.png); }))).then(function (e) {
-        var head = e[0], foot = e[1], font = e[2], imgs = e.slice(3);
+        var bg = e[0], head = e[1], foot = e[2], font = e[3], imgs = e.slice(4);
         var page = null, y = 0, n = 0;
         var newPage = function () {
           page = doc.addPage([W, H]); n++;
+          if (bg) page.drawImage(bg, { x: 0, y: 0, width: W, height: H });
           if (head) { var hh = W * (A.headerRatio || 0.1435); page.drawImage(head, { x: 0, y: H - hh - 8, width: W, height: hh }); }
           if (foot) { var fh = W * (A.footerRatio || 0.0918); page.drawImage(foot, { x: 0, y: 18, width: W, height: fh }); }
           y = H - CADS.TOP;
@@ -3329,7 +3352,7 @@ function buildCadsPdf(r) {
         doc.getPages().forEach(function (p, i, all) {
           var t = 'Course Assessment Data Sheet · ' + m.c.info.courseCode + ' · ' + r.section.name + ' · page ' + (i + 1) + ' of ' + all.length;
           var tw = font.widthOfTextAtSize(t, 7.5);
-          p.drawText(t, { x: W - X - tw, y: 80, size: 7.5, font: font, color: Pd.rgb(0.5, 0.5, 0.5) });
+          p.drawText(t, { x: W - X - tw, y: CADS.BOTTOM - 14, size: 7.5, font: font, color: Pd.rgb(0.35, 0.35, 0.35) });
         });
         return doc.save();
       });
