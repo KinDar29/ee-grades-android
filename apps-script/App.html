@@ -1840,14 +1840,20 @@ function columnPicker(columns, prefix, defaults) {
       '<select id="' + prefix + 'Existing" style="width:auto">' + columns.map(function (c) {
         return '<option value="' + esc(c.id) + '">' + esc(c.name) + ' (max ' + c.max + ')</option>';
       }).join('') + '</select></label>' : '') +
-    '<span class="hint">Columns that already have scores (like a graded exam) are never touched.</span></div>';
+    (defaults.scored && defaults.scored.length ? '<label class="check"><input type="radio" name="' + prefix + 'Col" value="reexam"> Re-exam of a graded column: ' +
+      '<select id="' + prefix + 'Reexam" style="width:auto">' + defaults.scored.map(function (c) {
+        return '<option value="' + esc(c.id) + '">' + esc(c.name) + ' (max ' + c.max + ')</option>';
+      }).join('') + '</select></label>' +
+      '<span class="hint" style="margin-left:24px">A student’s score replaces the one in that column only if it is higher. Students who don’t take it keep their score.</span>' : '') +
+    '<span class="hint">Columns that already have scores (like a graded exam) are never touched' + (defaults.scored ? ', except by a re-exam, which only raises them' : '') + '.</span></div>';
 }
 
 function readColumn(body, prefix) {
   var mode = ($('input[name="' + prefix + 'Col"]:checked', body) || {}).value || 'new';
   return {
     mode: mode,
-    assessmentId: mode === 'existing' ? $('#' + prefix + 'Existing', body).value : '',
+    assessmentId: mode === 'existing' ? $('#' + prefix + 'Existing', body).value
+      : (mode === 'reexam' ? $('#' + prefix + 'Reexam', body).value : ''),
     max: $('#' + prefix + 'Max', body) ? Number($('#' + prefix + 'Max', body).value) : undefined,
     weight: Number($('#' + prefix + 'Weight', body).value) || 0
   };
@@ -2093,7 +2099,7 @@ function manageExams(section) {
         '<div class="field"><label>Closes</label><input type="datetime-local" id="xClose"></div></div>' +
         '<label class="check"><input type="checkbox" id="xShow"> Show students their score right after submitting <span class="faint">(otherwise hidden until you release it)</span></label>' +
         exitsField('xExits', 3) +
-        columnPicker(data.columns, 'x', { max: false }) + siblingChecks(data.siblings) +
+        columnPicker(data.columns, 'x', { max: false, scored: data.scoredColumns || [] }) + siblingChecks(data.siblings) +
         '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="xCreate">Create exam</button></div></div></details>';
     }
 
@@ -2101,7 +2107,7 @@ function manageExams(section) {
       var st = { upcoming: '<span class="badge grey">Upcoming</span>', open: '<span class="badge green">Open now</span>', closed: '<span class="badge">Closed</span>' }[e.state];
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
         (e.showScore === 'IMMEDIATE' ? '<span class="badge">score shown at once</span>' : (e.released ? '<span class="badge green">released</span>' : '<span class="badge gold">not released</span>')) +
-        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · column “' + esc(e.columnName) + '”' +
+        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · ' + (e.reexam ? 're-exam of' : 'column') + ' “' + esc(e.columnName) + '”' + (e.reexam ? ' (keeps the higher score)' : '') +
         ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + '</div>' +
         '<div class="small" style="margin-top:3px">' + e.counts.submitted + ' / ' + e.counts.students + ' submitted · ' + (e.counts.started - e.counts.submitted) + ' in progress</div></div>' +
         '<div class="file-acts"><button class="btn sm primary" data-res="' + esc(e.id) + '">Results</button>' +
@@ -2844,9 +2850,21 @@ function cadsModel(r) {
     m.taskAvg[k] = dc.tasks.map(function (t, j) { return { task: t.task, avg: avg(students.map(function (s) { return s.tasks[k][j]; })) }; });
     m.rating[k] = avg(answered.map(function (s) { return s.ratings[k]; }));
   });
+  m.lecShare = c.finalShares ? c.finalShares.lecture : '80%';
+  m.labShare = c.finalShares ? c.finalShares.lab : '20%';
+  m.waitingLab = students.filter(function (s) { return !s.final || s.final.grade === null || s.final.grade === undefined; }).length;
   m.d.push(share(students.map(function (s) { return s.total; })));
   m.i.push(share(answered.map(function (s) { return s.total; })));
   return m;
+}
+
+/** Remark for the class record: INC / Dropped from the portal, else from the final grade. */
+function cadsRemark(s) {
+  if (s.status === 'INC') return 'INCOMPLETE';
+  if (s.status === 'Dropped') return 'DROPPED';
+  var g = s.final ? s.final.grade : null;
+  if (g === null || g === undefined) return '';
+  return g <= 3 ? 'PASSED' : (g < 5 ? 'CONDITIONAL' : 'FAILED');
 }
 
 function cadsTexts(m) {
@@ -2939,7 +2957,7 @@ function cadsChart(title, cats, series, h) {
 /** The report as a list of pieces: { html, brk (new page first) }. */
 function cadsPieces(m, tx) {
   var c = m.c, info = c.info, sec = m.r.section, T = m.T, P = [];
-  var add = function (html, brk) { P.push({ html: html, brk: !!brk }); };
+  var add = function (html, brk, width) { P.push({ html: html, brk: !!brk, width: width || 0 }); };
   var semLine = info.semester + ' Semester, S.Y. ' + info.schoolYear;
   var rowsOf = function (list, size) { var out = []; for (var i = 0; i < list.length; i += size) out.push(list.slice(i, i + size)); return out; };
 
@@ -2990,19 +3008,24 @@ function cadsPieces(m, tx) {
       '<br><br>Course Outcome Assessment<br>' + what + '<br><span style="font-weight:400">' + esc(info.courseCode + ' ' + info.courseTitle + ' · ' + sec.name + ' · ' + semLine) + '</span></td></tr>';
   };
   var recHead = banner('Direct Assessment') +
-    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attainment</th></tr>' +
+    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attainment</th>' +
+    '<th rowspan="4">Final Average (Lec ' + esc(m.lecShare) + ' + Lab ' + esc(m.labShare) + ')</th><th rowspan="4">Final Grade</th><th rowspan="4" style="width:82px">Remarks</th></tr>' +
     '<tr class="g"><th>%CO</th>' + dcos.map(function (d) { return '<td class="c" colspan="' + (d.tasks.length + 1) + '">' + esc(d.weight) + '</td>'; }).join('') + '</tr>' +
     '<tr class="g"><th>ASSESSMENT TASK</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<th>' + esc(t.task) + '</th>'; }).join('') + '<th class="y">%' + esc(d.co) + '</th>'; }).join('') + '</tr>' +
     '<tr class="g"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(t.weight) + '</td>'; }).join('') + '<td class="c y">' + esc(d.pctWeight) + '</td>'; }).join('') + '</tr>' +
-    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td></tr>';
-  rowsOf(m.students, 30).forEach(function (chunk, ci) {
+    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td><td class="c">100</td><td class="c">1.00–5.00</td><td></td></tr>';
+  rowsOf(m.students, 45).forEach(function (chunk, ci) {
     add((ci ? '' : '<div class="h2">B.&nbsp; <u>Course Outcome Assessment Class Record</u></div>') +
-      '<table class="small">' + recHead + chunk.map(function (s, i) {
-        return '<tr><td class="c">' + (ci * 30 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
+      '<table class="small rec"><colgroup><col style="width:24px"><col style="width:158px"></colgroup>' + recHead + chunk.map(function (s, i) {
+        return '<tr><td class="c">' + (ci * 45 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
           return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsNum(v) + '</td>'; }).join('') + '<td class="c y">' + cadsNum(s.co[d.co]) + '</td>';
-        }).join('') + '<td class="c y">' + cadsNum(s.total) + '</td></tr>';
+        }).join('') + '<td class="c y">' + cadsNum(s.total) + '</td>' +
+          '<td class="c">' + cadsNum(s.final && s.final.average) + '</td><td class="c b">' + cadsNum(s.final && s.final.grade) + '</td>' +
+          '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:9.3px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
       }).join('') + '</table>' +
-      (ci === Math.ceil(m.students.length / 30) - 1 ? '<div class="note">Blank = no score recorded yet (left out, the same as the portal’s running grade).</div>' : ''), ci === 0);
+      (ci === Math.ceil(m.students.length / 45) - 1 ? '<div class="note">Blank = no score recorded yet (left out, the same as the portal’s running grade). ' +
+        'Final average = ' + esc(m.lecShare) + ' lecture (Total %CO Attainment) + ' + esc(m.labShare) + ' laboratory, graded on the workbook’s transmutation table' +
+        (m.waitingLab ? '; ' + m.waitingLab + ' student(s) have no laboratory average yet, so their final grade is blank' : '') + '.</div>' : ''), ci === 0, 800);
   });
   var sumTable = function (s) {
     return '<table><tr class="g"><td style="width:40%"></td>' + m.CO.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '<th>All COs</th></tr>' +
@@ -3094,7 +3117,9 @@ function buildCadsPdf(r) {
   var m = cadsModel(r), tx = cadsTexts(m), pieces = cadsPieces(m, tx);
   var box = document.createElement('div');
   box.className = 'cads';
-  box.innerHTML = '<style>' + CADS_CSS + '</style>' + pieces.map(function (p, i) { return '<div class="pc" data-i="' + i + '">' + p.html + '</div>'; }).join('');
+  box.innerHTML = '<style>' + CADS_CSS + '</style>' + pieces.map(function (p, i) {
+    return '<div class="pc" data-i="' + i + '"' + (p.width ? ' style="width:' + p.width + 'px"' : '') + '>' + p.html + '</div>';
+  }).join('');
   document.body.appendChild(box);
   var libs;
   return Promise.all([loadScriptOnce(PDF_LIBS.pdfLib, 'PDFLib'), loadScriptOnce(PDF_LIBS.htmlToImage, 'htmlToImage')]).then(function (l) {
@@ -3105,7 +3130,8 @@ function buildCadsPdf(r) {
         var base = el.getBoundingClientRect();
         var fields = $$('[data-field]', el).map(function (f) {
           var b = f.getBoundingClientRect();
-          return { name: f.dataset.field, text: f.textContent, x: b.left - base.left, y: b.top - base.top, w: b.width, h: b.height };
+          return { name: f.dataset.field, text: f.textContent, px: parseFloat(getComputedStyle(f).fontSize) || 12.6, single: !!f.dataset.single,
+            x: b.left - base.left, y: b.top - base.top, w: b.width, h: b.height };
         });
         return libs.img.toPng(el, { pixelRatio: 2.2, backgroundColor: '#ffffff', skipFonts: true, cacheBust: false })
           .then(function (png) { shots.push({ png: png, w: el.offsetWidth, h: el.offsetHeight, brk: pieces[i].brk, fields: fields }); });
@@ -3117,7 +3143,7 @@ function buildCadsPdf(r) {
     return Pd.PDFDocument.create().then(function (doc) {
       var title = 'Course Assessment Data Sheet - ' + m.c.info.courseCode + ' - ' + r.section.name;
       doc.setTitle(title); doc.setAuthor(m.c.info.instructor || ''); doc.setCreator('EE Grades Portal');
-      var W = CADS.PAGE_W, H = CADS.PAGE_H, X = CADS.MARGIN, CW = W - 2 * X, k = CW / CADS.PX;
+      var W = CADS.PAGE_W, H = CADS.PAGE_H, X = CADS.MARGIN, CW = W - 2 * X;
       var form = doc.getForm();
       var embed = function (uri) {
         if (!uri) return Promise.resolve(null);
@@ -3134,7 +3160,7 @@ function buildCadsPdf(r) {
           y = H - CADS.TOP;
         };
         imgs.forEach(function (img, i) {
-          var s = shots[i], h = s.h * k;
+          var s = shots[i], k = CW / s.w, h = s.h * k;
           var room = H - CADS.TOP - CADS.BOTTOM;
           var scale = h > room ? room / h : 1;
           if (!page || s.brk || y - h * scale < CADS.BOTTOM) newPage();
@@ -3142,14 +3168,14 @@ function buildCadsPdf(r) {
           page.drawImage(img, { x: x, y: top - h * scale, width: w, height: h * scale });
           s.fields.forEach(function (f) {
             var tf = form.createTextField(f.name.replace(/[^\w]/g, '_') + '_' + i);
-            tf.enableMultiline();
+            if (!f.single) tf.enableMultiline();
             tf.setText(f.text);
             tf.addToPage(page, {
               x: x + (f.x + 3) * k * scale, y: top - (f.y + f.h - 2) * k * scale,
               width: (f.w - 6) * k * scale, height: (f.h - 4) * k * scale,
               font: font, borderWidth: 0, borderColor: undefined, backgroundColor: undefined, textColor: Pd.rgb(0, 0, 0)
             });
-            tf.setFontSize(9.5);
+            tf.setFontSize(Math.round(f.px * k * scale * 10) / 10);
           });
           y = top - h * scale - 4;
         });

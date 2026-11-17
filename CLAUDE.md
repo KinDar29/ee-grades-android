@@ -113,6 +113,13 @@ change log at the bottom for every change you ship.
   from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
+  Class record also has Final Average (Setup's lecture/lab shares, 80/20),
+  Final Grade (1.00–5.00) — both from the workbook's **Final Grade** tab, blank
+  until the lab instructor's averages are pasted there — and Remarks (single-
+  line PDF fields): INCOMPLETE / DROPPED from the class sheet's Final Status
+  tab, else PASSED (≤ 3.00), CONDITIONAL (4.00), FAILED (5.00). The class
+  record piece is drawn 800 px wide and scaled to the page; field font sizes
+  follow the HTML (`px × scale`).
 - `DirectAssessment.js` — admin "Direct assessment" tab (`admin.direct`,
   `admin.direct.refresh`): every class's requirements + per-student scores,
   percent, grade and standing for a semester, cached 5 min per class
@@ -195,7 +202,12 @@ change log at the bottom for every change you ship.
   print blocked, name + ID watermark (`S.profile`). Exam column `Max Exits`
   (0 = never; added by `ensureColumns_`): the server locks on autosave or
   submit once exits ≥ it — result `How` = `LOCKED` with the answers so far;
-  exits only go up. Reset lets the student start over. Web portal only — the Android app doesn't show
+  exits only go up. Reset lets the student start over.
+  **Re-exam** (column choice "Re-exam of a graded column", Exams `Re-exam` =
+  HIGHER): scores go into an already-graded column only when higher than
+  what's there (never lowers; non-takers untouched; blank → re-exam score).
+  The column's scores at creation are kept in `Original Scores` (JSON) so
+  Reset attempt puts the student's original score back. Web portal only — the Android app doesn't show
   assignments or exams yet.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
@@ -425,3 +437,17 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   per-section **Course Assessment Data Sheet** PDF (`CourseAssessment.js`,
   `CadsAssets.js`). Verified: `checkIndirectAssessment()` on the live workbook
   = workbook Comparison tab (CO1 92.94/13.48, CO2 80/20.69, CO3 71.76/94.25).
+- **2026-11-17** — Portal deployment version 25 (live 16:41): Course Assessment Data Sheet
+  class record gains Final Average (lecture 80% + lab 20%), Final Grade and
+  editable Remarks (PASSED / CONDITIONAL / FAILED / INCOMPLETE / DROPPED).
+- **2026-11-17** — Data only: EE121 question bank gained the **midterm bank**
+  (`EE121_Midterm_Question_Bank.pdf`, Units I–IV): 300 items, rows 302–601,
+  IDs `MID-L001…L100 / MID-M001…M100 / MID-H001…H100`, Unit "Unit 1"–"Unit 4"
+  (per the PDF's table), CO1, Level **Low / Middle / High** (owner's names; the
+  Unit 8 items keep Easy / Medium / Hard), keys from the PDF (75 per letter;
+  8 numeric items re-computed and matched). Written as plain text
+  (`setNumberFormat('@')`, so "50%" stays text) by a temporary editor
+  function reading a temporary Drive JSON (both removed). Bank: 600 items.
+- **2026-11-17** — (version 25, live 16:41)
+  Re-exam mode for exams (keeps the higher score in an already-graded column
+  such as the Midterm; owner's choice: higher score wins).
