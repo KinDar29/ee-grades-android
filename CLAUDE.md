@@ -206,6 +206,14 @@ change log at the bottom for every change you ship.
   the moment a student leaves (not only when focus comes back — iPhones can
   lose focus without hiding the page and never return it), and any tap on
   the blurred page brings it back (`examTapWhileOut`).
+  **Questions shown** (Exams `Navigation`, `navigation_`): ALL (one page,
+  default/blank), ONE (one at a time, Previous + numbered buttons), NOBACK
+  (one at a time, Next only; skipping a blank asks first). For NOBACK the
+  client sends `pos` (first question not yet final) with every save/submit
+  and saves at once on Next; the autosave cache keeps `{a, away, pos}` and
+  `mergeNoBack_` keeps the cached answers for every question before the
+  cached pos, so a tampered or reloaded page can't change them; pos only
+  goes up and a reload resumes there.
   **Re-exam** (column choice "Re-exam of a graded column", Exams `Re-exam` =
   HIGHER): scores go into an already-graded column only when higher than
   what's there (never lowers; non-takers untouched; blank → re-exam score).
@@ -460,3 +468,15 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   hiding the page and never gave it back). The box now always appears when a
   student leaves, and any tap on the blurred page brings it back. Students
   already stuck: reload, open the class, Continue (answers are autosaved).
+- **2026-11-17 21:10** — Data only: EE121 question bank gained the **Unit 1
+  bank** (`EE121_Unit1_Question_Bank.pdf`): 300 items, rows 602–901, IDs
+  `U1-E001…E100 / U1-M001…M100 / U1-H001…H100`, Unit "Unit 1", CO1, Level
+  Easy / Medium / Hard (same unit name as the midterm items, whose levels are
+  Low / Middle / High, so blueprints keep them apart). Keys from the PDF (75
+  per letter); every Medium and Hard key recomputed and matched; "according
+  to the module" wording removed (14 items, classification items say "by the
+  valence-electron rule"). Written with the Sheets API into rows pre-set to
+  plain text, then read back: identical. Bank: 900 items.
+- **2026-11-17** — Saved in the editor, NOT deployed yet: exam "Questions
+  shown" setting (all on one page / one at a time / one at a time with no
+  going back, enforced on the server).
