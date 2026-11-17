@@ -654,6 +654,20 @@ function releaseExam_(session, sectionId, examId) {
   return adminExamResults_(session, sectionId, examId);
 }
 
+/** "Copy scores to class record": one exam, or every exam of the class when examId is blank. */
+function syncExamNow_(session, sectionId, examId) {
+  var exams = examId ? [examById_(sectionId, examId)] : examsOf_(sectionId);
+  var copied = 0, done = [], waiting = [];
+  exams.forEach(function (e) {
+    if (!e.released && e.showScore !== 'IMMEDIATE') { waiting.push(e.title); return; }
+    finalizeExpired_(e);
+    copied += syncExamScores_(session, e);
+    done.push(e.title);
+  });
+  logAction_(session.id, session.role, 'EXAM_SYNC', sectionId, { id: examId || 'ALL', copied: copied });
+  return { copied: copied, exams: done, notReleased: waiting };
+}
+
 /** Lets one student take the exam again (removes their attempt and score). */
 function resetExamAttempt_(session, sectionId, examId, studentId) {
   var exam = examById_(sectionId, examId);
