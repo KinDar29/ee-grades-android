@@ -2162,7 +2162,16 @@ function exitsField(id, value) {
 
 function manageExams(section) {
   var M = lmsModal('Exams · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
-  var data = null;
+  var data = null, scoresMoved = false;
+  // when scores were copied, reopen the class record behind this window on close
+  // so the new scores show without a manual reload
+  var watch = new MutationObserver(function () {
+    if (document.body.contains(M.root)) return;
+    watch.disconnect();
+    if (scoresMoved && S.gb && S.gb.section && S.gb.section.id === section.id &&
+        !Object.keys(S.dirty || {}).length && !$('.modal-back')) renderGradebook(section.id);
+  });
+  watch.observe($('#modalRoot'), { childList: true });
 
   function run(action, params, msg) {
     M.body.classList.add('is-busy');
@@ -2259,11 +2268,12 @@ function manageExams(section) {
       busy(xc, true, 'Creating…');
       run('admin.exam.create', p, 'Exam created.').then(list).catch(function () { busy(xc, false); });
     });
-    $$('[data-res]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { results(this.dataset.res); }); });
+    $$('[data-res]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { scoresMoved = true; results(this.dataset.res); }); });
     function copyScores(btn, examId) {
       busy(btn, true, 'Copying…');
       call('admin.exam.sync', { sectionId: section.id, examId: examId || '' }).then(function (r) {
         busy(btn, false);
+        if (r.copied) scoresMoved = true;
         var msg = r.copied ? r.copied + ' score' + (r.copied === 1 ? '' : 's') + ' copied to the class record.' : 'Class record already up to date.';
         if (r.notReleased.length) msg += ' Not copied (scores not released yet): ' + r.notReleased.join(', ') + '.';
         toast(msg, r.notReleased.length && !r.exams.length ? 'error' : undefined);
