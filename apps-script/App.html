@@ -2359,6 +2359,7 @@ function drawAdminTab() {
   if (S.tab === 'classes') renderClassesTab();
   else if (S.tab === 'direct') renderDirectTab();
   else if (S.tab === 'indirect') renderIndirectTab();
+  else if (S.tab === 'cads') renderCadsTab();
   else if (S.tab === 'students') renderStudentsTab();
   else if (S.tab === 'subjects') renderSubjectsTab();
   else if (S.tab === 'semesters') renderSemestersTab();
@@ -2702,8 +2703,7 @@ function drawIndirectTab(r) {
     'Read from the course outcome assessment workbook · ' + esc(r.checkedAt) + '</div></div>' +
     '<div class="spacer"></div>' + semesterPicker() + (pick.opts.length ? sectionPicker(pick.opts) : '') +
     '<button class="btn" id="indRefresh">↻ Refresh</button>' +
-    (r.blocks.length ? '<button class="btn gold" id="indPdf">⬇ Download PDF</button>' : '') +
-    (r.blocks.length ? '<button class="btn primary" id="indCads" title="Course Assessment Data Sheet for the chosen section">⬇ Course Assessment Data Sheet</button>' : '') + '</div>';
+    (r.blocks.length ? '<button class="btn gold" id="indPdf">⬇ Download PDF</button>' : '') + '</div>';
 
   if (!r.blocks.length) {
     html += empty('No survey linked yet',
@@ -2726,8 +2726,6 @@ function drawIndirectTab(r) {
   $('#indRefresh').addEventListener('click', function () { renderIndirectTab(true); });
   var pdfBtn = $('#indPdf');
   if (pdfBtn) pdfBtn.addEventListener('click', function () { downloadIndirectPdf(r, this); });
-  var cadsBtn = $('#indCads');
-  if (cadsBtn) cadsBtn.addEventListener('click', function () { downloadCads(sel ? sel.id : '', this); });
   $$('[data-copy]').forEach(function (b) {
     b.addEventListener('click', function () {
       var text = this.dataset.copy;
@@ -3280,10 +3278,10 @@ function buildCadsPdf(r) {
   }).then(function (bytes) { box.remove(); return bytes; }, function (err) { box.remove(); throw err; });
 }
 
-function downloadCads(sectionId, btn) {
+function downloadCads(sectionId, btn, have) {
   if (!sectionId) { toast('Pick a section first — the data sheet is made per section.', 'error'); return; }
   busy(btn, true, 'Making the data sheet…');
-  call('admin.cads', { sectionId: sectionId })
+  (have ? Promise.resolve(have) : call('admin.cads', { sectionId: sectionId }))
     .then(function (r) { return buildCadsPdf(r).then(function (bytes) { return { r: r, bytes: bytes }; }); })
     .then(function (x) {
       busy(btn, false);
@@ -3295,6 +3293,105 @@ function downloadCads(sectionId, btn) {
       busy(btn, false);
       toast(err.message || 'The data sheet could not be made.', 'error');
     });
+}
+
+/* ------------------- Course Assessment Data Sheet tab -------------------- */
+/*  Pick a section, see what the data sheet will say (numbers, comments,
+    analysis, CQI actions — written from the current numbers), download it.   */
+
+function renderCadsTab(refresh) {
+  loading('Reading the assessment workbook…');
+  call('admin.indirect', { semesterId: S.admin ? S.admin.semesterId : '' })
+    .then(function (r) { S.indirect = r; drawCadsTab(refresh === true); })
+    .catch(function (err) {
+      setContent('<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+    });
+}
+
+function drawCadsTab(fresh) {
+  var r = S.indirect, opts = indirectSelection(r).opts;
+  var cur = opts.some(function (o) { return o.id === S.dashSection; }) ? S.dashSection : '';
+  var head = '<div class="row wrap" style="margin-bottom:16px">' +
+    '<div><h2 style="font-size:20px">Course Assessment Data Sheet</h2>' +
+    '<div class="small muted">One per section, built from the course outcome assessment workbook. ' +
+    'The comments, analysis and CQI actions are written from the numbers at the moment you open or download it.</div></div>' +
+    '<div class="spacer"></div>' + semesterPicker() +
+    (opts.length ? '<select id="cadsSec" style="width:auto;min-width:210px"><option value="">Choose a section…</option>' +
+      opts.map(function (o) {
+        return '<option value="' + esc(o.id) + '"' + (o.id === cur ? ' selected' : '') + '>' + esc(o.label) + (o.count !== undefined ? ' (' + o.count + ')' : '') + '</option>';
+      }).join('') + '</select>' : '') +
+    (cur ? '<button class="btn" id="cadsRefresh" title="Read the workbook again">↻ Refresh</button><button class="btn primary" id="cadsDl">⬇ Download PDF</button>' : '') +
+    '</div>';
+
+  var bind = function (data) {
+    bindSemesterPicker();
+    var sp = $('#cadsSec');
+    if (sp) sp.addEventListener('change', function () { S.dashSection = this.value; drawCadsTab(); });
+    var rf = $('#cadsRefresh');
+    if (rf) rf.addEventListener('click', function () { drawCadsTab(true); });
+    var dl = $('#cadsDl');
+    if (dl) dl.addEventListener('click', function () { downloadCads(cur, this, data); });
+  };
+
+  if (!opts.length) {
+    setContent(head + empty('No assessment workbook linked yet',
+      'Open Classes, click Edit on a class, and paste the course outcome assessment workbook link.'));
+    bind(null);
+    return;
+  }
+  if (!cur) {
+    setContent(head + empty('Choose a section', 'The data sheet is made per section. Pick one above to see what it will say and download it.'));
+    bind(null);
+    return;
+  }
+  setContent(head + '<div class="loading"><span class="spinner"></span> Reading the workbook for this section…</div>');
+  bind(null);
+  call('admin.cads', { sectionId: cur, fresh: !!fresh }).then(function (data) {
+    if (S.tab !== 'cads' || S.dashSection !== cur) return;
+    setContent(head + cadsPreview(data));
+    bind(data);
+  }).catch(function (err) {
+    setContent(head + '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>');
+    bind(null);
+  });
+}
+
+function cadsPreview(r) {
+  var m = cadsModel(r), t = cadsTexts(m), info = r.course.info || {};
+  var pct = function (x) { return x.of ? x.at + ' / ' + x.of + ' (' + x.pct.toFixed(2) + '%)' : '—'; };
+  var ok = function (x) {
+    return !x.of ? '<span class="badge grey">no data</span>'
+      : (x.pct >= m.T ? '<span class="badge green">Attained</span>' : '<span class="badge red">Not attained</span>');
+  };
+  var rows = m.CO.map(function (k, i) {
+    return '<tr><td><b>' + esc(k) + '</b></td><td class="num">' + pct(m.d[i]) + '</td><td>' + ok(m.d[i]) + '</td>' +
+      '<td class="num">' + pct(m.i[i]) + '</td><td>' + ok(m.i[i]) + '</td></tr>';
+  }).join('');
+  var od = m.d[m.d.length - 1], oi = m.i[m.i.length - 1];
+  rows += '<tr><td><b>All COs</b></td><td class="num">' + pct(od) + '</td><td>' + ok(od) + '</td><td class="num">' + pct(oi) + '</td><td>' + ok(oi) + '</td></tr>';
+  var list = function (title, arr) {
+    return '<div class="card"><div class="card-head"><h3>' + title + '</h3></div><div class="card-body">' +
+      arr.map(function (x, i) { return '<p style="margin:0 0 10px"><b>' + esc(m.CO[i]) + ':</b> ' + esc(x) + '</p>'; }).join('') + '</div></div>';
+  };
+  return '<div class="card"><div class="card-body"><div class="row wrap" style="gap:18px">' +
+      '<div><div class="tiny muted">Course</div><b>' + esc((info.courseCode || '') + (info.courseTitle ? ' — ' + info.courseTitle : '')) + '</b></div>' +
+      '<div><div class="tiny muted">Section</div><b>' + esc(r.section.name) + '</b></div>' +
+      '<div><div class="tiny muted">Students</div><b>' + m.students.length + '</b></div>' +
+      '<div><div class="tiny muted">Answered the survey</div><b>' + m.answered + '</b></div>' +
+      '<div><div class="tiny muted">Attainment target</div><b>' + m.T + '%</b></div>' +
+      (m.waitingLab ? '<div><div class="tiny muted">Final grade</div><b>' + m.waitingLab + ' waiting for the lab averages</b></div>' : '') +
+    '</div></div></div>' +
+    '<div class="card"><div class="card-head"><h3>CO attainment</h3><div class="spacer"></div><span class="small muted">students at ' + m.T + '% or higher</span></div>' +
+    '<div class="card-body tight"><div class="table-wrap"><table><thead><tr><th>CO</th><th class="num">Direct</th><th></th><th class="num">Indirect (survey)</th><th></th></tr></thead>' +
+    '<tbody>' + rows + '</tbody></table></div></div></div>' +
+    list('Comments on the direct assessment', t.direct) +
+    list('Comments on the indirect assessment', t.indirect) +
+    list('Comparison of direct and indirect assessment', t.compare) +
+    '<div class="card"><div class="card-head"><h3>Actions for continuous quality improvement</h3></div><div class="card-body tight"><div class="table-wrap"><table>' +
+    '<thead><tr><th style="width:90px">CO</th><th>Finding</th><th>Action</th></tr></thead><tbody>' +
+    t.cqi.map(function (x) { return '<tr><td><b>' + esc(x.co) + '</b></td><td>' + esc(x.finding) + '</td><td>' + esc(x.action) + '</td></tr>'; }).join('') +
+    '</tbody></table></div></div></div>' +
+    '<p class="tiny faint" style="margin:6px 0 30px">This is the wording the PDF will start with. You can still change it in the downloaded PDF; those changes stay in that file only.</p>';
 }
 
 /* ---------------------------- direct assessment ---------------------------- */
