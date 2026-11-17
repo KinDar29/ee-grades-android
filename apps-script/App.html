@@ -1652,6 +1652,8 @@ function examGuardOn() {
   document.addEventListener('webkitfullscreenchange', examFsChange);
   window.addEventListener('blur', examBlur);
   window.addEventListener('focus', examFocus);
+  document.addEventListener('pointerdown', examTapWhileOut, true);
+  document.addEventListener('touchstart', examTapWhileOut, true);
   EXAM.hadFocus = document.hasFocus();
   if (fsElement()) EXAM.fs = true;
   if (EXAM.away && EXAM.x.maxExits) examWarn(false);
@@ -1667,6 +1669,8 @@ function examGuardOff() {
   document.removeEventListener('webkitfullscreenchange', examFsChange);
   window.removeEventListener('blur', examBlur);
   window.removeEventListener('focus', examFocus);
+  document.removeEventListener('pointerdown', examTapWhileOut, true);
+  document.removeEventListener('touchstart', examTapWhileOut, true);
   if (fsElement()) {
     var exit = document.exitFullscreen || document.webkitExitFullscreen;
     try { var r = exit && exit.call(document); if (r && r.catch) r.catch(function () {}); } catch (e) { /* ignore */ }
@@ -1694,13 +1698,21 @@ function examLeft() {
   document.body.classList.add('exam-hidden');
   examLocalSave();
   saveExamNow();
-  if (document.visibilityState === 'visible' && document.hasFocus()) examWarn(true);
+  // Always put up the "Back to the exam" box. iPhones can take focus away
+  // without hiding the page and then never send it back, which left
+  // students on blurred questions with no button.
+  examWarn(true);
+}
+
+/** Safety net: any tap while the questions are blurred brings the box back. */
+function examTapWhileOut() {
+  if (EXAM && EXAM.out && !document.querySelector('.exam-cover')) examWarn(true);
 }
 
 function examBack() {
   if (EXAM && document.hasFocus()) EXAM.hadFocus = true;
   if (!EXAM || !EXAM.out || document.visibilityState !== 'visible') return;
-  examWarn(true);
+  if (!document.querySelector('.exam-cover')) examWarn(true);
 }
 
 /** Cover the questions until the student chooses to go back. */

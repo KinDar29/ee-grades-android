@@ -202,7 +202,10 @@ change log at the bottom for every change you ship.
   print blocked, name + ID watermark (`S.profile`). Exam column `Max Exits`
   (0 = never; added by `ensureColumns_`): the server locks on autosave or
   submit once exits ≥ it — result `How` = `LOCKED` with the answers so far;
-  exits only go up. Reset lets the student start over.
+  exits only go up. Reset lets the student start over. The cover is shown
+  the moment a student leaves (not only when focus comes back — iPhones can
+  lose focus without hiding the page and never return it), and any tap on
+  the blurred page brings it back (`examTapWhileOut`).
   **Re-exam** (column choice "Re-exam of a graded column", Exams `Re-exam` =
   HIGHER): scores go into an already-graded column only when higher than
   what's there (never lowers; non-takers untouched; blank → re-exam score).
@@ -451,3 +454,9 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17** — (version 25, live 16:41)
   Re-exam mode for exams (keeps the higher score in an already-graded column
   such as the Midterm; owner's choice: higher score wins).
+- **2026-11-17 17:15** — Portal deployment version 26 (during the Midterm,
+  owner's go-ahead): exam guard fix — an iPhone student was left on blurred
+  questions with no "Back to the exam" button (Safari took focus without
+  hiding the page and never gave it back). The box now always appears when a
+  student leaves, and any tap on the blurred page brings it back. Students
+  already stuck: reload, open the class, Continue (answers are autosaved).
