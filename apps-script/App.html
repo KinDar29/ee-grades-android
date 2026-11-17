@@ -3190,7 +3190,7 @@ function cadsPieces(m, tx) {
           '<td class="c">' + cadsN(f.average) + '</td><td class="c b">' + (f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
           '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:9px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
       }).join('') + '</table>' +
-      (ci === recChunks.length - 1 ? '<div class="note">Blank = no score recorded yet (left out, the same as the portal’s running grade). ' +
+      (ci === recChunks.length - 1 ? '<div class="note">Blank = no score recorded yet. ' +
         'Final average = ' + esc(m.lecShare) + ' lecture (Total %CO Attainment) + ' + esc(m.labShare) + ' laboratory, graded on the workbook’s transmutation table' +
         '. A lecture or laboratory average below 50% gives that failing grade whatever the other is. INC = incomplete, DRP = dropped' +
         (m.waitingLab ? '; ' + m.waitingLab + ' student(s) have no final grade yet' : '') + '.</div>' : ''), true, 18 + 190 + dcos.reduce(function (a, d) { return a + 30 * (d.tasks.length + 1); }, 0) + 34 + 32 + 34 + 34 + 66);
