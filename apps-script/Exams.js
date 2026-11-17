@@ -40,7 +40,7 @@ SCHEMA[EXAMS.BANK_TAB] = ['Subject ID', 'Spreadsheet ID', 'Created At'];
 SCHEMA[EXAMS.TAB] = [
   'Exam ID', 'Section ID', 'Title', 'Assessment ID', 'Bank ID', 'Blueprint', 'Items',
   'Duration Minutes', 'Opens At', 'Closes At', 'Show Score', 'Released',
-  'Pool File ID', 'Created At', 'Created By', 'Max Exits', 'Re-exam', 'Original Scores'
+  'Pool File ID', 'Created At', 'Created By', 'Max Exits', 'Re-exam', 'Original Scores', 'Navigation'
 ];
 SCHEMA[EXAMS.ATTEMPTS] = ['Attempt ID', 'Exam ID', 'Section ID', 'Student ID', 'Started At', 'Deadline', 'Questions'];
 SCHEMA[EXAMS.RESULTS] = [
@@ -205,8 +205,28 @@ function examOut_(r) {
     released: bool_(r['Released']),
     poolFileId: str_(r['Pool File ID']),
     maxExits: Math.max(0, Math.round(num_(r['Max Exits']) || 0)),
-    reexam: str_(r['Re-exam']) === 'HIGHER'
+    reexam: str_(r['Re-exam']) === 'HIGHER',
+    navigation: navigation_(r['Navigation'])
   };
+}
+
+/** How questions are shown: ALL on one page, ONE at a time, or NOBACK (one at a time, no going back). */
+function navigation_(v) {
+  var s = str_(v).toUpperCase();
+  return s === 'ONE' || s === 'NOBACK' ? s : 'ALL';
+}
+
+/**
+ * "No going back": answers to questions the server already knows the student
+ * moved past are frozen — later saves can't change them. pos only goes up.
+ */
+function mergeNoBack_(exam, cached, answers, pos, n) {
+  if (exam.navigation !== 'NOBACK') return { a: answers, pos: 0 };
+  var was = Math.max(0, Math.round(num_(cached && cached.pos) || 0));
+  var now = Math.min(Math.max(n - 1, 0), Math.max(was, Math.round(num_(pos) || 0)));
+  var a = (answers || []).slice(0, n), ca = (cached && cached.a) || [];
+  for (var i = 0; i < was && i < n; i++) a[i] = ca[i] === undefined ? null : ca[i];
+  return { a: a, pos: now };
 }
 
 /** "Lock after N exits": 0 = never, otherwise 1–20. */
@@ -369,7 +389,7 @@ function createExam_(session, p) {
         'Duration Minutes': duration, 'Opens At': "'" + opens, 'Closes At': "'" + closes,
         'Show Score': p.showScore === 'IMMEDIATE' ? 'IMMEDIATE' : 'RELEASED', 'Released': 'FALSE',
         'Pool File ID': poolId, 'Created At': nowStamp_(), 'Created By': session.id, 'Max Exits': maxExits,
-        'Re-exam': reexam ? 'HIGHER' : '', 'Original Scores': original
+        'Re-exam': reexam ? 'HIGHER' : '', 'Original Scores': original, 'Navigation': navigation_(p.navigation)
       });
     });
     logAction_(session.id, session.role, 'EXAM_CREATE', sec.id, { title: title, items: items, sections: targets.join(',') });
@@ -397,6 +417,7 @@ function updateExam_(session, p) {
     if (p.closesAt !== undefined) patch['Closes At'] = "'" + closes;
     if (p.showScore !== undefined) patch['Show Score'] = p.showScore === 'IMMEDIATE' ? 'IMMEDIATE' : 'RELEASED';
     if (p.maxExits !== undefined) patch['Max Exits'] = maxExits_(p.maxExits);
+    if (p.navigation !== undefined) patch['Navigation'] = navigation_(p.navigation);
     updateObject_(sh, row._row, patch);
     logAction_(session.id, session.role, 'EXAM_UPDATE', p.sectionId, { id: p.id, fields: Object.keys(patch).join(',') });
     return adminExams_(session, p.sectionId);
@@ -688,7 +709,8 @@ function attemptPayload_(exam, att, pool) {
       var item = pool.questions[q[0]] || { text: '(question missing)', choices: [] };
       return { n: i, text: item.text, choices: q[1].map(function (o) { return item.choices[o]; }), image: !!item.image };
     }),
-    answers: saved.a || [], away: saved.away || 0, maxExits: exam.maxExits
+    answers: saved.a || [], away: saved.away || 0, maxExits: exam.maxExits,
+    navigation: exam.navigation, pos: exam.navigation === 'NOBACK' ? (num_(saved.pos) || 0) : 0
   };
 }
 
@@ -753,17 +775,19 @@ function saveExamAnswers_(session, p) {
   if (prev) return str_(prev['How']) === 'LOCKED' ? { done: true, locked: true, message: lockedMessage_() } : { done: true };
   var now = new Date().getTime();
   if (now > att.deadline + EXAMS.GRACE_MS) return { late: true, serverNow: now };
-  var answers = (p.answers || []).slice(0, att.questions.length);
-  var away = Math.max(num_(p.away) || 0, cachedAnswers_(att.id).away || 0);   // never goes down
+  var cached = cachedAnswers_(att.id);
+  var away = Math.max(num_(p.away) || 0, cached.away || 0);   // never goes down
   var exam = examById_(att.sectionId, att.examId);
+  var merged = mergeNoBack_(exam, cached, (p.answers || []).slice(0, att.questions.length), p.pos, att.questions.length);
+  var answers = merged.a;
   if (exam.maxExits && away >= exam.maxExits) {
     var r = appendResult_(att, loadPool_(exam.poolFileId), answers, away, 'LOCKED');
     CacheService.getScriptCache().remove('ans:' + att.id);
     logAction_(session.id, session.role, 'EXAM_LOCKED', att.sectionId, { exam: exam.id, exits: away });
     return { done: true, locked: true, message: lockedMessage_(), submittedAt: r.submittedAt, items: r.items };
   }
-  CacheService.getScriptCache().put('ans:' + att.id, JSON.stringify({ a: answers, away: away }), EXAMS.CACHE_S);
-  return { saved: true, serverNow: now, away: away };
+  CacheService.getScriptCache().put('ans:' + att.id, JSON.stringify({ a: answers, away: away, pos: merged.pos }), EXAMS.CACHE_S);
+  return { saved: true, serverNow: now, away: away, pos: merged.pos };
 }
 
 function lockedMessage_() {
@@ -783,7 +807,7 @@ function submitExam_(session, p) {
   var now = new Date().getTime();
   var inTime = now <= att.deadline + EXAMS.GRACE_MS;
   var c = cachedAnswers_(att.id);
-  var answers = inTime && p.answers ? p.answers : c.a;
+  var answers = inTime && p.answers ? mergeNoBack_(exam, c, p.answers, p.pos, att.questions.length).a : c.a;
   var away = Math.max(num_(p.away) || 0, c.away || 0);
   var locked = exam.maxExits && away >= exam.maxExits;
   var r = appendResult_(att, loadPool_(exam.poolFileId), answers, away, locked ? 'LOCKED' : (inTime ? 'SUBMITTED' : 'LATE'));
