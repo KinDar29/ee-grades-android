@@ -91,7 +91,7 @@ function readIndirectWorkbook_(workbookId) {
     throw new Error('The assessment workbook could not be opened. Check the link on the class.');
   }
   var out = {
-    title: ss.getName(), url: ss.getUrl(), formUrl: '',
+    title: ss.getName(), url: ss.getUrl(), formUrl: '', target: 70,
     cos: [], overall: null, students: [], statements: [], responders: [], responses: 0,
     updated: nowStamp_()
   };
@@ -116,6 +116,11 @@ function readIndirectWorkbook_(workbookId) {
   }
 
   // ---- Indirect Assessment: summary + students
+  // Workbooks in the department-template layout (CourseAssessment.js) carry
+  // per-student rows only; the numbers are worked out at the workbook's target.
+  var course = isCourseTemplate_(ss) ? readCourseWorkbook_(ss) : null;
+  if (course) indirectFromCourse_(course, out);
+  if (!course) {
   var res = ss.getSheetByName(INDIRECT.TABS.RESULTS);
   if (!res) throw new Error('The workbook has no "' + INDIRECT.TABS.RESULTS + '" tab.');
   var v = res.getDataRange().getValues();
@@ -166,6 +171,7 @@ function readIndirectWorkbook_(workbookId) {
       out.students.push(st);
     }
   }
+  } // old layout
 
   // ---- Survey Responses: who answered (latest per student) and statement averages
   var coDesc = {};
@@ -193,9 +199,11 @@ function readIndirectWorkbook_(workbookId) {
     out.responders = Object.keys(latest);
     out.responses = out.responders.length;
     // Section of each responder, from the form's "Section" answer.
-    var responderSection = {};
+    var responderSection = {}, idSection = {};
+    if (course) course.direct.students.forEach(function (x) { if (x.id) idSection[studentKey_(x.id)] = sectionKey_(x.section); });
     out.responders.forEach(function (id) {
-      responderSection[id] = rSecCol >= 0 ? sectionKey_(latest[id].row[rSecCol]) : '';
+      responderSection[id] = course && idSection[id] !== undefined ? idSection[id]
+        : (rSecCol >= 0 ? sectionKey_(latest[id].row[rSecCol]) : '');
     });
     // dist[CO][sectionKey or '*'] = [count of 1s, 2s, 3s, 4s, 5s]
     var dist = {};
@@ -232,6 +240,7 @@ function readIndirectWorkbook_(workbookId) {
     Object.keys(labels).forEach(function (t) { out.ratingLabels[labels[t]] = t.charAt(0).toUpperCase() + t.slice(1); });
   }
 
+  if (!course) {
   // ---- Comparison: direct vs indirect per CO
   var comparison = {};
   var cmp = ss.getSheetByName(INDIRECT.TABS.COMPARISON);
@@ -273,6 +282,15 @@ function readIndirectWorkbook_(workbookId) {
     indirect: oc.indirect !== null && oc.indirect !== undefined ? oc.indirect : (oAns ? round_(oAt / oAns * 100, 1) : null),
     direct: oc.direct === undefined ? null : oc.direct
   };
+  } // old layout
+  if (course) {
+    // descriptions from Setup when the form headers had none
+    out.cos.forEach(function (c) { if (!c.description) c.description = coDesc[c.co] || ''; });
+    // only the outcomes the workbook assesses (the form may also carry lab statements)
+    var assessed = {};
+    out.cos.forEach(function (c) { assessed[c.co] = true; });
+    out.statements = out.statements.filter(function (st) { return assessed[st.co]; });
+  }
 
   var text = JSON.stringify(out);
   if (text.length < 90000) {
@@ -337,7 +355,7 @@ function indirectDashboard_(session, semesterId) {
 function refreshIndirect_(session, semesterId) {
   var cache = CacheService.getScriptCache();
   listSections_(str_(semesterId) || str_(settings_()['ACTIVE_SEMESTER_ID'])).forEach(function (sec) {
-    if (sec.workbookId) cache.remove('indirect:' + sec.workbookId);
+    if (sec.workbookId) cache.removeAll(['indirect:' + sec.workbookId, 'course:' + sec.workbookId]);
   });
   return indirectDashboard_(session, semesterId);
 }
