@@ -514,3 +514,10 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   the final grade and remark come from the whole-number average (owner's rule:
   49.5 → 50 → 3.00 PASSED). Lecture grade (column F) still looks up the
   unrounded lecture average.
+- **2026-11-17 23:55** — Data only: lab final averages pasted into the EE121
+  workbook's Final Grade lab table (L9:M97, 89 students) from the lab
+  instructors' files — BSECE: Direct Assessment %CO4 (15% ME + 15% FE + 70%
+  lab); BSEE 2A: AVERAGE column; BSEE 2B: TOTAL AVERAGE. Domingo's lab file
+  ID 24-140203 → our 24-140202 (same name); Ulep had no ID in the 2B file
+  (matched by name). Avanzado (24-050384, 2B) is not in the 2B lab file —
+  still "Waiting for lab average".
