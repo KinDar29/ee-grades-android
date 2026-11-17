@@ -521,3 +521,9 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   ID 24-140203 → our 24-140202 (same name); Ulep had no ID in the 2B file
   (matched by name). Avanzado (24-050384, 2B) is not in the 2B lab file —
   still "Waiting for lab average".
+- **2026-11-17 23:58** — Data only: EE121 workbook Final Grade rule (owner's):
+  if the lecture or the lab average (each rounded to a whole number) is below
+  50, the final grade is that failing component's grade (4.00 / 5.00; the
+  worse one if both) — the other component can't lift it. Lab "INC" /
+  "DROPPED" text gives INC / DROPPED (remark INCOMPLETE / DROPPED). Columns
+  I:J (rows 9–208); Final average (H) is still shown as 80/20.
