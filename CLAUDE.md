@@ -435,3 +435,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17** — Portal deployment version 25: Course Assessment Data Sheet
   class record gains Final Average (lecture 80% + lab 20%), Final Grade and
   editable Remarks (PASSED / CONDITIONAL / FAILED / INCOMPLETE / DROPPED).
+- **2026-11-17** — Data only: EE121 question bank gained the **midterm bank**
+  (`EE121_Midterm_Question_Bank.pdf`, Units I–IV): 300 items, rows 302–601,
+  IDs `MID-L001…L100 / MID-M001…M100 / MID-H001…H100`, Unit "Unit 1"–"Unit 4"
+  (per the PDF's table), CO1, Level **Low / Middle / High** (owner's names; the
+  Unit 8 items keep Easy / Medium / Hard), keys from the PDF (75 per letter;
+  8 numeric items re-computed and matched). Written as plain text
+  (`setNumberFormat('@')`, so "50%" stays text) by a temporary editor
+  function reading a temporary Drive JSON (both removed). Bank: 600 items.
