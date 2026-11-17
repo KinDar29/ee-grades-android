@@ -216,7 +216,17 @@ change log at the bottom for every change you ship.
 - `Export.js` — printable PDF class record. `Setup.js` — `setUp()`,
   `installTriggers()`. `Triggers.js` — hourly `scheduledRosterSync`.
 - `Utils.js` — sheet helpers, `withLock_` (re-entrant script lock), settings,
-  grade scale. `Index.html` / `Styles.html` / `App.html` — the web UI.
+  grade scale. **Student-page caches**: `sectionRows_(tab, sectionId)` keeps one
+  class's rows of Exams / ExamAttempts / ExamResults / Assignments /
+  Submissions / Materials for 5 min (big JSON columns dropped), keyed by a
+  per-tab version that `bumpTab_` changes on every write (`appendObject_`,
+  `updateObject_` and each `deleteRow` site call it — add `bumpTab_(sh)` to
+  any new write path on those tabs). `student.class` also uses
+  `cachedSectionData_` (10 min, `sdata:<id>`, cleared by
+  `clearSectionSnapshot_`; re-read fresh if the student isn't in it) and
+  `surveyStatus_` (10 min, `survey:<workbookId>`). Exam start/save/submit and
+  admin pages read live. Logs: `timing student.class {…}` and `slow <action>`
+  (> 3 s). `Index.html` / `Styles.html` / `App.html` — the web UI.
 
 Rules that matter:
 - Writes to the master sheet go through `withLock_`. `rebuildRoster_` always
@@ -451,3 +461,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17** — (version 25, live 16:41)
   Re-exam mode for exams (keeps the higher score in an already-graded column
   such as the Midterm; owner's choice: higher score wins).
+- **2026-11-17** — Saved in the editor, NOT deployed yet (wait until no exam
+  is open): faster student class page — cached class data, cached per-class
+  rows of the exam / problem-set / material tabs, cached survey status,
+  timing logs.
