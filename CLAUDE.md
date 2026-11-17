@@ -490,5 +490,9 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 21:59** — Portal deployment version 28: separate "Course
   Assessment Data Sheet" tab with an on-screen preview (button removed from
   the Indirect tab).
-- **2026-11-17** — Saved in the editor, NOT deployed yet: re-exam credit %
-  (only part of a re-exam score counts; adjustable per exam).
+- **2026-11-17 23:11** — Portal deployment version 29: re-exam credit %
+  (only part of a re-exam score counts; adjustable per exam in Edit); students
+  see the percentage as a note on the exam card and in the Start dialog.
+  The hourly trigger (`scheduledRosterSync`) is still NOT installed — the
+  project has 0 triggers, so exam scores copy only on Results/Release. The
+  owner must run `installTriggers()` in the editor once.
