@@ -437,7 +437,22 @@ function updateExam_(session, p) {
     if (p.reexamCredit !== undefined && str_(row['Re-exam']) === 'HIGHER') patch['Re-exam Credit'] = creditIn_(p.reexamCredit);
     updateObject_(sh, row._row, patch);
     logAction_(session.id, session.role, 'EXAM_UPDATE', p.sectionId, { id: p.id, fields: Object.keys(patch).join(',') });
-    return adminExams_(session, p.sectionId);
+    var others = 0;
+    if (p.creditAllSections && patch['Re-exam Credit'] !== undefined) {
+      // same re-exam (same title) in every other section of this subject and semester
+      var sibs = siblingSections_(getSectionRecord_(p.sectionId)).map(function (x) { return x.id; });
+      var title = str_(row['Title']).toLowerCase();
+      readTable_(sh).rows.forEach(function (r) {
+        if (sibs.indexOf(str_(r['Section ID'])) < 0 || str_(r['Re-exam']) !== 'HIGHER' ||
+            str_(r['Title']).toLowerCase() !== title) return;
+        updateObject_(sh, r._row, { 'Re-exam Credit': patch['Re-exam Credit'] });
+        others++;
+      });
+      logAction_(session.id, session.role, 'EXAM_CREDIT_ALL', p.sectionId, { title: row['Title'], credit: patch['Re-exam Credit'], others: others });
+    }
+    var out = adminExams_(session, p.sectionId);
+    out.creditOthers = others;
+    return out;
   });
 }
 
@@ -655,7 +670,19 @@ function releaseExam_(session, sectionId, examId) {
 }
 
 /** "Copy scores to class record": one exam, or every exam of the class when examId is blank. */
-function syncExamNow_(session, sectionId, examId) {
+function syncExamNow_(session, sectionId, examId, allSections) {
+  if (allSections && !examId) {
+    // this class and every other section of the same subject this semester
+    var ids = [str_(sectionId)].concat(siblingSections_(getSectionRecord_(sectionId)).map(function (x) { return x.id; }));
+    var total = { copied: 0, exams: [], notReleased: [], sections: ids.length };
+    ids.forEach(function (id) {
+      var r = syncExamNow_(session, id, '', false);
+      total.copied += r.copied;
+      total.exams = total.exams.concat(r.exams);
+      r.notReleased.forEach(function (t) { if (total.notReleased.indexOf(t) < 0) total.notReleased.push(t); });
+    });
+    return total;
+  }
   var exams = examId ? [examById_(sectionId, examId)] : examsOf_(sectionId);
   var copied = 0, done = [], waiting = [];
   exams.forEach(function (e) {

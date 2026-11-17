@@ -2220,7 +2220,8 @@ function manageExams(section) {
     }
 
     if (data.exams.length) html += '<div class="row" style="margin-top:10px"><span class="small muted">Exam scores go into the class record when you press Copy (or open Results / Release).</span><div class="spacer"></div>' +
-      '<button class="btn sm" id="xSyncAll">⇩ Copy all scores to class record</button></div>';
+      '<button class="btn sm" id="xSyncAll">⇩ Copy all scores to class record</button>' +
+      ((data.siblings || []).length ? '<button class="btn sm" id="xSyncEvery" title="This class and ' + data.siblings.length + ' other section' + (data.siblings.length === 1 ? '' : 's') + ' of this subject">⇩ Copy for all sections</button>' : '') + '</div>';
     html += '<div class="file-list" style="margin-top:8px">' + data.exams.map(function (e) {
       var st = { upcoming: '<span class="badge grey">Upcoming</span>', open: '<span class="badge green">Open now</span>', closed: '<span class="badge">Closed</span>' }[e.state];
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
@@ -2269,12 +2270,13 @@ function manageExams(section) {
       run('admin.exam.create', p, 'Exam created.').then(list).catch(function () { busy(xc, false); });
     });
     $$('[data-res]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { scoresMoved = true; results(this.dataset.res); }); });
-    function copyScores(btn, examId) {
-      busy(btn, true, 'Copying…');
-      call('admin.exam.sync', { sectionId: section.id, examId: examId || '' }).then(function (r) {
+    function copyScores(btn, examId, every) {
+      busy(btn, true, every ? 'Copying all sections…' : 'Copying…');
+      call('admin.exam.sync', { sectionId: section.id, examId: examId || '', allSections: !!every }).then(function (r) {
         busy(btn, false);
         if (r.copied) scoresMoved = true;
-        var msg = r.copied ? r.copied + ' score' + (r.copied === 1 ? '' : 's') + ' copied to the class record.' : 'Class record already up to date.';
+        var where = r.sections ? ' (' + r.sections + ' sections)' : '';
+        var msg = r.copied ? r.copied + ' score' + (r.copied === 1 ? '' : 's') + ' copied to the class record' + where + '.' : 'Class record already up to date' + where + '.';
         if (r.notReleased.length) msg += ' Not copied (scores not released yet): ' + r.notReleased.join(', ') + '.';
         toast(msg, r.notReleased.length && !r.exams.length ? 'error' : undefined);
       }).catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
@@ -2282,6 +2284,8 @@ function manageExams(section) {
     $$('[data-xsync]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { copyScores(this, this.dataset.xsync); }); });
     var sa = $('#xSyncAll', M.body);
     if (sa) sa.addEventListener('click', function () { copyScores(sa, ''); });
+    var se = $('#xSyncEvery', M.body);
+    if (se) se.addEventListener('click', function () { copyScores(se, '', true); });
     $$('[data-xedit]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { editExam(this.dataset.xedit); }); });
     $$('[data-xrm]', M.body).forEach(function (b2) {
       b2.addEventListener('click', function () {
@@ -2301,7 +2305,9 @@ function manageExams(section) {
       '<div class="field"><label>Closes</label><input type="datetime-local" id="eClose" value="' + esc(toLocalInput(e.closesAt)) + '"></div></div>' +
       '<label class="check"><input type="checkbox" id="eShow"' + (e.showScore === 'IMMEDIATE' ? ' checked' : '') + '> Show students their score right after submitting</label>' +
       navField('eNav', e.navigation) + exitsField('eExits', e.maxExits || 0) +
-      (e.reexam ? creditField('eCredit', e.reexamCredit) : '') +
+      (e.reexam ? creditField('eCredit', e.reexamCredit) +
+        ((data.siblings || []).length ? '<label class="check"><input type="checkbox" id="eCreditAll" checked> Use this percentage for “' + esc(e.title) + '” in every section <span class="faint">(' +
+          esc(data.siblings.map(function (x) { return x.name; }).join(', ')) + ')</span></label>' : '') : '') +
       '<p class="tiny faint">The questions can’t be changed after creating the exam. To use a different set, remove it and create a new one.</p>' +
       '<div class="row" style="margin-top:12px"><div class="spacer"></div><button class="btn primary" id="eSave">Save</button></div>';
     $('#xBack', M.body).addEventListener('click', function () { list(); });
@@ -2311,8 +2317,13 @@ function manageExams(section) {
         opensAt: fromLocalInput($('#eOpen', M.body).value), closesAt: fromLocalInput($('#eClose', M.body).value),
         showScore: $('#eShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#eExits', M.body).value) || 0,
         navigation: $('#eNav', M.body).value,
-        reexamCredit: $('#eCredit', M.body) ? Number($('#eCredit', M.body).value) : undefined
-      }, 'Saved.').then(list);
+        reexamCredit: $('#eCredit', M.body) ? Number($('#eCredit', M.body).value) : undefined,
+        creditAllSections: !!($('#eCreditAll', M.body) && $('#eCreditAll', M.body).checked)
+      }).then(function (d) {
+        toast(d.creditOthers ? 'Saved here and in ' + d.creditOthers + ' other section' + (d.creditOthers === 1 ? '' : 's') + '. Press Copy to update the class records.' :
+          (e.reexam ? 'Saved. Press Copy to update the class record.' : 'Saved.'));
+        list(d);
+      });
     });
   }
 
