@@ -506,6 +506,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 23:17** — Portal deployment version 30: "⇩ Copy scores" per exam and
   "⇩ Copy all scores to class record" in 🧪 Exams. Owner decided against the
   hourly trigger; the project has 0 triggers and stays that way.
-- **2026-11-17 23:40** — (not deployed yet) class record reloads after the
+- **2026-11-17 23:32** — Portal deployment version 31: class record reloads after the
   Exams window closes if scores were copied; "⇩ Copy for all sections"; re-exam
   credit % can be set for the same exam in every section at once.
