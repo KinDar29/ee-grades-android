@@ -1455,6 +1455,14 @@ function assignmentsCard(sectionId, list) {
     }).join('') + '</div><p class="tiny faint" style="margin:8px 6px 0">Upload your answers as one PDF per problem set, up to 10 MB. Scan your work to PDF first. You can replace it until the due time.</p></div></div>';
 }
 
+/** What a student is told about a re-exam's credit. */
+function creditNote(credit) {
+  return credit >= 100
+    ? 'Your score counts in full, and you keep the higher of this score and your original one.'
+    : 'Only ' + credit + '% of your score here counts toward your grade (e.g. 45/50 counts as ' +
+      (Math.round(90 * credit) / 100) + ' of 100). You keep the higher of that and your original score.';
+}
+
 function examsCard(sectionId, list) {
   if (!list || !list.length) return '';
   return '<div class="card"><div class="card-head"><h3>Exams</h3></div><div class="card-body tight"><div class="file-list">' +
@@ -1468,11 +1476,14 @@ function examsCard(sectionId, list) {
           : (e.locked ? '' : '<span class="badge green">✓ Submitted</span>')),
         missed: '<span class="badge red">Closed</span>'
       }[e.state] || '';
-      var btn = e.state === 'open' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '">Start exam</button>'
-        : (e.state === 'in_progress' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '">Continue</button>' : '');
+      var cr = e.reexamCredit ? ' data-credit="' + e.reexamCredit + '"' : '';
+      var btn = e.state === 'open' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '"' + cr + '>Start exam</button>'
+        : (e.state === 'in_progress' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '"' + cr + '>Continue</button>' : '');
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st +
         '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' minutes · open ' + esc(fmtWhen(e.opensAt)) +
-        ' to ' + esc(fmtWhen(e.closesAt)) + '</div></div><div class="file-acts">' + btn + '</div></div>';
+        ' to ' + esc(fmtWhen(e.closesAt)) + '</div>' +
+        (e.reexamCredit ? '<div class="tiny" style="margin-top:3px"><span class="badge gold">Re-exam</span> ' + esc(creditNote(e.reexamCredit)) + '</div>' : '') +
+        '</div><div class="file-acts">' + btn + '</div></div>';
     }).join('') + '</div></div></div>';
 }
 
@@ -1516,8 +1527,8 @@ function bindStudentLms(sectionId) {
   });
   $$('[data-exam]').forEach(function (b) {
     b.addEventListener('click', function () {
-      var id = this.dataset.exam, max = Number(this.dataset.maxExits) || 0;
-      confirmDialog('Start the exam?', 'The timer starts now and keeps running even if you close the page. Answer every question, then press Submit.\n\n' +
+      var id = this.dataset.exam, max = Number(this.dataset.maxExits) || 0, credit = Number(this.dataset.credit) || 0;
+      confirmDialog('Start the exam?', (credit ? 'This is a re-exam. ' + creditNote(credit) + '\n\n' : '') + 'The timer starts now and keeps running even if you close the page. Answer every question, then press Submit.\n\n' +
         'The exam opens in full screen. Stay on this page until you submit: switching apps or tabs, or leaving full screen, is recorded and your teacher sees it.' +
         (max ? ' After ' + max + ' time' + (max === 1 ? '' : 's') + ' the exam locks and your answers are submitted.' : '') +
         ' Copying and pasting are turned off.', 'Start', false)
@@ -2129,6 +2140,14 @@ function navField(id, value) {
     '<div class="tiny faint" style="margin-top:4px">With “no going back”, once a student moves to the next question the answer to the previous one is final — the server ignores later changes to it.</div></div>';
 }
 
+function creditField(id, value) {
+  return '<div class="field" style="margin-top:10px"><label for="' + id + '">Re-exam credit <span class="faint">(only for “Re-exam of a graded column”)</span></label>' +
+    '<div class="row" style="gap:8px"><input type="number" id="' + id + '" min="1" max="100" step="0.5" value="' + (Number(value) || 100) + '" style="width:80px;text-align:right">' +
+    '<span class="small muted">% of the re-exam score counts</span></div>' +
+    '<div class="tiny faint" style="margin-top:4px">Example at 80%: 45/50 on the re-exam counts as 72 of 100. The student keeps the higher of that and the original score. ' +
+    'Changing it later re-applies to everyone who took the re-exam.</div></div>';
+}
+
 function navLabel(v) {
   return v === 'NOBACK' ? 'one at a time, no going back' : (v === 'ONE' ? 'one at a time' : 'all on one page');
 }
@@ -2186,7 +2205,8 @@ function manageExams(section) {
         '<div class="field"><label>Closes</label><input type="datetime-local" id="xClose"></div></div>' +
         '<label class="check"><input type="checkbox" id="xShow"> Show students their score right after submitting <span class="faint">(otherwise hidden until you release it)</span></label>' +
         navField('xNav', 'ALL') + exitsField('xExits', 3) +
-        columnPicker(data.columns, 'x', { max: false, scored: data.scoredColumns || [] }) + siblingChecks(data.siblings) +
+        columnPicker(data.columns, 'x', { max: false, scored: data.scoredColumns || [] }) +
+        ((data.scoredColumns || []).length ? creditField('xCredit', 100) : '') + siblingChecks(data.siblings) +
         '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="xCreate">Create exam</button></div></div></details>';
     }
 
@@ -2194,7 +2214,7 @@ function manageExams(section) {
       var st = { upcoming: '<span class="badge grey">Upcoming</span>', open: '<span class="badge green">Open now</span>', closed: '<span class="badge">Closed</span>' }[e.state];
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
         (e.showScore === 'IMMEDIATE' ? '<span class="badge">score shown at once</span>' : (e.released ? '<span class="badge green">released</span>' : '<span class="badge gold">not released</span>')) +
-        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · ' + (e.reexam ? 're-exam of' : 'column') + ' “' + esc(e.columnName) + '”' + (e.reexam ? ' (keeps the higher score)' : '') +
+        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · ' + (e.reexam ? 're-exam of' : 'column') + ' “' + esc(e.columnName) + '”' + (e.reexam ? ' (keeps the higher score' + (e.reexamCredit < 100 ? ', re-exam counts ' + e.reexamCredit + '%' : '') + ')' : '') +
         ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + ' · ' + navLabel(e.navigation) + '</div>' +
         '<div class="small" style="margin-top:3px">' + e.counts.submitted + ' / ' + e.counts.students + ' submitted · ' + (e.counts.started - e.counts.submitted) + ' in progress</div></div>' +
         '<div class="file-acts"><button class="btn sm primary" data-res="' + esc(e.id) + '">Results</button>' +
@@ -2227,6 +2247,7 @@ function manageExams(section) {
         opensAt: fromLocalInput($('#xOpen', M.body).value), closesAt: fromLocalInput($('#xClose', M.body).value),
         showScore: $('#xShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#xExits', M.body).value) || 0,
         navigation: $('#xNav', M.body).value,
+        reexamCredit: $('#xCredit', M.body) ? Number($('#xCredit', M.body).value) : 100,
         column: readColumn(M.body, 'x'), alsoSectionIds: checkedSiblings(M.body)
       };
       if (!p.title) { toast('Give the exam a title.', 'error'); return; }
@@ -2255,6 +2276,7 @@ function manageExams(section) {
       '<div class="field"><label>Closes</label><input type="datetime-local" id="eClose" value="' + esc(toLocalInput(e.closesAt)) + '"></div></div>' +
       '<label class="check"><input type="checkbox" id="eShow"' + (e.showScore === 'IMMEDIATE' ? ' checked' : '') + '> Show students their score right after submitting</label>' +
       navField('eNav', e.navigation) + exitsField('eExits', e.maxExits || 0) +
+      (e.reexam ? creditField('eCredit', e.reexamCredit) : '') +
       '<p class="tiny faint">The questions can’t be changed after creating the exam. To use a different set, remove it and create a new one.</p>' +
       '<div class="row" style="margin-top:12px"><div class="spacer"></div><button class="btn primary" id="eSave">Save</button></div>';
     $('#xBack', M.body).addEventListener('click', function () { list(); });
@@ -2263,7 +2285,8 @@ function manageExams(section) {
         id: e.id, title: $('#eTitle', M.body).value.trim(), duration: Number($('#eDur', M.body).value),
         opensAt: fromLocalInput($('#eOpen', M.body).value), closesAt: fromLocalInput($('#eClose', M.body).value),
         showScore: $('#eShow', M.body).checked ? 'IMMEDIATE' : 'RELEASED', maxExits: Number($('#eExits', M.body).value) || 0,
-        navigation: $('#eNav', M.body).value
+        navigation: $('#eNav', M.body).value,
+        reexamCredit: $('#eCredit', M.body) ? Number($('#eCredit', M.body).value) : undefined
       }, 'Saved.').then(list);
     });
   }

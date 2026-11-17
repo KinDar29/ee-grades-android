@@ -220,7 +220,12 @@ change log at the bottom for every change you ship.
   HIGHER): scores go into an already-graded column only when higher than
   what's there (never lowers; non-takers untouched; blank → re-exam score).
   The column's scores at creation are kept in `Original Scores` (JSON) so
-  Reset attempt puts the student's original score back. Web portal only — the Android app doesn't show
+  Reset attempt puts the student's original score back. **Re-exam credit** (Exams
+  `Re-exam Credit`, 1–100, blank = 100; `credit_` / `creditIn_`): the column
+  gets max(original from `Original Scores`, re-exam score × credit%),
+  recomputed on every sync, so changing the credit in Edit re-applies (up or
+  down, never below the original); manual edits to a re-exam taker's cell
+  are overwritten by the next sync. Web portal only — the Android app doesn't show
   assignments or exams yet.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
@@ -485,3 +490,9 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 21:59** — Portal deployment version 28: separate "Course
   Assessment Data Sheet" tab with an on-screen preview (button removed from
   the Indirect tab).
+- **2026-11-17 23:11** — Portal deployment version 29: re-exam credit %
+  (only part of a re-exam score counts; adjustable per exam in Edit); students
+  see the percentage as a note on the exam card and in the Start dialog.
+  The hourly trigger (`scheduledRosterSync`) is still NOT installed — the
+  project has 0 triggers, so exam scores copy only on Results/Release. The
+  owner must run `installTriggers()` in the editor once.
