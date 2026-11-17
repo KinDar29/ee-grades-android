@@ -437,7 +437,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   per-section **Course Assessment Data Sheet** PDF (`CourseAssessment.js`,
   `CadsAssets.js`). Verified: `checkIndirectAssessment()` on the live workbook
   = workbook Comparison tab (CO1 92.94/13.48, CO2 80/20.69, CO3 71.76/94.25).
-- **2026-11-17** — Portal deployment version 25: Course Assessment Data Sheet
+- **2026-11-17** — Portal deployment version 25 (live 16:41): Course Assessment Data Sheet
   class record gains Final Average (lecture 80% + lab 20%), Final Grade and
   editable Remarks (PASSED / CONDITIONAL / FAILED / INCOMPLETE / DROPPED).
 - **2026-11-17** — Data only: EE121 question bank gained the **midterm bank**
@@ -448,6 +448,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   8 numeric items re-computed and matched). Written as plain text
   (`setNumberFormat('@')`, so "50%" stays text) by a temporary editor
   function reading a temporary Drive JSON (both removed). Bank: 600 items.
-- **2026-11-17** — Saved in the editor, NOT deployed yet (goes out with v25):
-  re-exam mode for exams (keeps the higher score in an already-graded column
+- **2026-11-17** — (version 25, live 16:41)
+  Re-exam mode for exams (keeps the higher score in an already-graded column
   such as the Midterm; owner's choice: higher score wins).
