@@ -2427,24 +2427,38 @@ function indirectView(b, key) {
     sections: secs, cos: [], statements: [], students: [], overall: null, dist: {}
   };
   if (!d) return v;
+  var T = d.target || 70;
+  v.target = T;
   v.students = (d.students || []).filter(function (s) { return !key || secKey(s.section) === key; });
+  var perStudentDirect = v.students.some(function (s) { return s.direct; });
+  v.directBySection = !!(key && perStudentDirect);
   var done = v.students.filter(function (s) { return s.submitted; });
   v.cos = d.cos.map(function (c) {
     if (!key) return c;
     var pcts = done.map(function (s) { return s.pct ? s.pct[c.co] : null; }).filter(function (x) { return x !== null && x !== undefined; });
-    var at = pcts.filter(function (x) { return x >= 70; }).length;
+    var at = pcts.filter(function (x) { return x >= T - 1e-9; }).length;
     var avgR = avgOf(done.map(function (s) { return s.ratings ? s.ratings[c.co] : null; }));
     var ind = pcts.length ? at / pcts.length * 100 : null;
+    var dir = c.direct;
+    if (perStudentDirect) {
+      var dv = v.students.map(function (s) { return s.direct ? s.direct[c.co] : null; }).filter(function (x) { return x !== null && x !== undefined; });
+      dir = dv.length ? dv.filter(function (x) { return x >= T - 1e-9; }).length / dv.length * 100 : null;
+    }
     return {
       co: c.co, description: c.description, weight: c.weight,
-      averageRating: avgR, atLeast70: at, answered: pcts.length, indirect: ind, direct: c.direct,
-      gap: ind !== null && c.direct !== null ? ind - c.direct : null
+      averageRating: avgR, atLeast70: at, answered: pcts.length, indirect: ind, direct: dir,
+      gap: ind !== null && dir !== null && dir !== undefined ? ind - dir : null
     };
   });
   if (key) {
     var ov = done.map(function (s) { return s.overall; }).filter(function (x) { return x !== null && x !== undefined; });
-    var oat = ov.filter(function (x) { return x >= 70; }).length;
-    v.overall = { atLeast70: oat, answered: ov.length, indirect: ov.length ? oat / ov.length * 100 : null, direct: d.overall ? d.overall.direct : null };
+    var oat = ov.filter(function (x) { return x >= T - 1e-9; }).length;
+    var od = d.overall ? d.overall.direct : null;
+    if (perStudentDirect) {
+      var dt = v.students.map(function (s) { return s.directOverall; }).filter(function (x) { return x !== null && x !== undefined; });
+      od = dt.length ? dt.filter(function (x) { return x >= T - 1e-9; }).length / dt.length * 100 : null;
+    }
+    v.overall = { atLeast70: oat, answered: ov.length, indirect: ov.length ? oat / ov.length * 100 : null, direct: od };
   } else {
     v.overall = d.overall;
   }
@@ -2468,7 +2482,7 @@ function indirectParts(b, key, forPdf) {
 
   var first = b.error ? '<div class="alert warn"><span class="ic">!</span><div>' + esc(b.error) + '</div></div>' : '';
   var rate = v.enrolled ? Math.round(v.answered / v.enrolled * 100) : 0;
-  var o = v.overall;
+  var o = v.overall, T = v.target || 70;
   first += '<div class="charts">' +
     donut('Survey responses', [
       { label: 'Answered', value: v.answered, color: C.green },
@@ -2476,9 +2490,9 @@ function indirectParts(b, key, forPdf) {
     ], rate + '%', v.answered + ' of ' + v.enrolled);
   if (o && o.answered) {
     first += donut('Overall self-rating', [
-      { label: 'At least 70%', value: o.atLeast70, color: C.green },
-      { label: 'Below 70%', value: Math.max(0, o.answered - o.atLeast70), color: C.gold }
-    ], o.indirect === null ? '—' : fmt(o.indirect, 0) + '%', 'rate ≥ 70%');
+      { label: 'At least ' + T + '%', value: o.atLeast70, color: C.green },
+      { label: 'Below ' + T + '%', value: Math.max(0, o.answered - o.atLeast70), color: C.gold }
+    ], o.indirect === null ? '—' : fmt(o.indirect, 0) + '%', 'rate ≥ ' + T + '%');
   }
   if (!key && v.sections.length > 1) {
     first += columns('Response rate by section', v.sections.map(function (s) {
@@ -2494,13 +2508,13 @@ function indirectParts(b, key, forPdf) {
     columns('Course outcome attainment: indirect vs direct', v.cos.map(function (c) {
       return {
         label: c.co, bars: [
-          { value: c.indirect, color: C.green, title: c.co + ' indirect: ' + fmt(c.indirect, 0) + '% rate themselves ≥ 70%' },
-          { value: c.direct, color: C.gold, title: c.co + ' direct: ' + fmt(c.direct, 0) + '% reached 70% on assessments' }
+          { value: c.indirect, color: C.green, title: c.co + ' indirect: ' + fmt(c.indirect, 0) + '% rate themselves ≥ ' + T + '%' },
+          { value: c.direct, color: C.gold, title: c.co + ' direct: ' + fmt(c.direct, 0) + '% reached ' + T + '% on assessments' }
         ]
       };
     }), {
-      max: 100, unit: '%', target: 70, targetLabel: '70% target',
-      series: [{ label: 'Indirect (self-rating ≥ 70%)', color: C.green }, { label: 'Direct (assessments ≥ 70%)' + (key ? ' · whole class' : ''), color: C.gold }]
+      max: 100, unit: '%', target: T, targetLabel: T + '% target',
+      series: [{ label: 'Indirect (self-rating ≥ ' + T + '%)', color: C.green }, { label: 'Direct (assessments ≥ ' + T + '%)' + (key && !v.directBySection ? ' · whole class' : ''), color: C.gold }]
     });
   var labels = d.ratingLabels || {};
   var hasDist = v.cos.some(function (c) { return v.dist[c.co] && v.dist[c.co].some(function (n) { return n; }); });
@@ -2519,7 +2533,7 @@ function indirectParts(b, key, forPdf) {
   parts.push('<h4 style="margin:4px 0 8px">Course outcomes</h4>' +
     '<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr>' +
     '<th>CO</th><th class="num' + (forPdf ? '' : ' hide-sm') + '">Weight</th><th class="num">Avg rating</th>' +
-    '<th style="width:24%">Indirect ≥ 70%</th><th style="width:24%">Direct ≥ 70%</th><th class="num">Gap</th>' +
+    '<th style="width:24%">Indirect ≥ ' + T + '%</th><th style="width:24%">Direct ≥ ' + T + '%</th><th class="num">Gap</th>' +
     '</tr></thead><tbody>' +
     v.cos.map(function (c) {
       var gap = c.gap === null || c.gap === undefined ? '—'
@@ -2533,7 +2547,8 @@ function indirectParts(b, key, forPdf) {
         '<td class="num">' + gap + '</td></tr>';
     }).join('') + '</tbody></table></div>' +
     '<p class="tiny faint" style="margin:-10px 0 18px">A positive gap means students rate themselves higher than their results show.' +
-    (key ? ' Direct attainment is for the whole class (the workbook doesn’t split it by section).' : '') + '</p>');
+    (key && !v.directBySection ? ' Direct attainment is for the whole class (the workbook doesn’t split it by section).' : '') +
+    ' A student attains a CO at ' + T + '% (the target on the workbook’s Setup tab).</p>');
 
   var rated = v.statements.filter(function (s) { return s.average !== null; });
   var row = function (s) {
@@ -2592,7 +2607,8 @@ function drawIndirectTab(r) {
     'Read from the course outcome assessment workbook · ' + esc(r.checkedAt) + '</div></div>' +
     '<div class="spacer"></div>' + semesterPicker() + (pick.opts.length ? sectionPicker(pick.opts) : '') +
     '<button class="btn" id="indRefresh">↻ Refresh</button>' +
-    (r.blocks.length ? '<button class="btn gold" id="indPdf">⬇ Download PDF</button>' : '') + '</div>';
+    (r.blocks.length ? '<button class="btn gold" id="indPdf">⬇ Download PDF</button>' : '') +
+    (r.blocks.length ? '<button class="btn primary" id="indCads" title="Course Assessment Data Sheet for the chosen section">⬇ Course Assessment Data Sheet</button>' : '') + '</div>';
 
   if (!r.blocks.length) {
     html += empty('No survey linked yet',
@@ -2615,6 +2631,8 @@ function drawIndirectTab(r) {
   $('#indRefresh').addEventListener('click', function () { renderIndirectTab(true); });
   var pdfBtn = $('#indPdf');
   if (pdfBtn) pdfBtn.addEventListener('click', function () { downloadIndirectPdf(r, this); });
+  var cadsBtn = $('#indCads');
+  if (cadsBtn) cadsBtn.addEventListener('click', function () { downloadCads(sel ? sel.id : '', this); });
   $$('[data-copy]').forEach(function (b) {
     b.addEventListener('click', function () {
       var text = this.dataset.copy;
@@ -2758,6 +2776,409 @@ function downloadIndirectPdf(r, btn) {
     .catch(function (err) {
       busy(btn, false);
       toast(err.message || 'The PDF could not be made.', 'error');
+    });
+}
+
+/* ----------------------- Course Assessment Data Sheet ----------------------- */
+/*  One section's CO assessment report on 8.5 x 13 in pages, laid out like the
+    College's Program Assessment Data Sheet (header/footer images, green and
+    yellow tables). Data: admin.cads (CourseAssessment.js) = the workbook's
+    department-template tabs. Each piece is drawn off-screen, captured as an
+    image and placed on the page; the comment, analysis and CQI cells become
+    PDF text fields carrying the written text, so they can be changed in any
+    PDF reader before printing.                                                 */
+
+var CADS = {
+  GREEN: '#92D050', YELLOW: '#FFFF00', GREY: '#808080', BLUE: '#4472C4', ORANGE: '#ED7D31',
+  PAGE_W: 612, PAGE_H: 936, MARGIN: 72, TOP: 112, BOTTOM: 96, PX: 624   // 624 css px = 468 pt (6.5 in)
+};
+
+var CADS_CSS =
+  '.cads{position:fixed;left:-20000px;top:0;width:' + CADS.PX + 'px;background:#fff;color:#000;' +
+  'font-family:Calibri,Carlito,"Segoe UI",Arial,sans-serif;font-size:13.3px;line-height:1.3}' +
+  '.cads .pc{padding:2px 0 8px;background:#fff}' +
+  '.cads table{border-collapse:collapse;width:100%}' +
+  '.cads td,.cads th{border:1px solid #000;padding:3px 5px;vertical-align:middle;font-weight:normal}' +
+  '.cads th{font-weight:700;text-align:center}' +
+  '.cads .g{background:' + CADS.GREEN + '}.cads .y{background:' + CADS.YELLOW + '}.cads .gr{background:' + CADS.GREY + ';color:#fff;font-weight:700}' +
+  '.cads .c{text-align:center}.cads .b{font-weight:700}' +
+  '.cads .title{text-align:center;font-weight:700;font-size:16px;margin:4px 0 10px}' +
+  '.cads .h1{font-weight:700;font-size:15px;margin:10px 0 6px}.cads .h1 span{display:inline-block;width:48px}' +
+  '.cads .h1 u,.cads .h2 u{text-underline-offset:2px}' +
+  '.cads .h2{font-weight:700;font-size:14.5px;margin:6px 0 8px 48px}' +
+  '.cads .note{font-style:italic;font-size:11px;color:#555;margin-top:4px}' +
+  '.cads .small td,.cads .small th{font-size:9.3px;padding:1px 2px;line-height:1.15}' +
+  '.cads .banner{font-family:Cambria,Caladea,Georgia,serif;font-weight:700;text-align:center;font-size:10px;line-height:1.35}' +
+  '.cads .fld{font-family:Helvetica,Arial,sans-serif;font-size:12.6px;line-height:1.25;vertical-align:top;white-space:pre-wrap}' +
+  '.cads .fld.hide{color:transparent}' +
+  '.cads .chart{border:1px solid #d9d9d9}' +
+  '.cads .sig td{border:0;padding:0 6px;vertical-align:top}' +
+  '.cads .body{text-align:justify;font-size:14px}';
+
+function cadsNum(v, d) { return v === null || v === undefined || isNaN(v) ? '' : Number(v).toFixed(d === undefined ? 2 : d); }
+function cadsPct(v) { return v === null || v === undefined ? '—' : (Math.round(v * 100) / 100) + '%'; }
+
+/** Section numbers: per-student rows, counts at the target, comments. */
+function cadsModel(r) {
+  var c = r.course, key = r.section.key, T = c.target || 70;
+  var students = c.direct.students.filter(function (s) { return secKey(s.section) === key; });
+  var byName = {};
+  c.indirect.students.forEach(function (s) { byName[s.name.toLowerCase().replace(/\s+/g, '')] = s; });
+  var ind = students.map(function (s) { return byName[s.name.toLowerCase().replace(/\s+/g, '')] || { name: s.name, ratings: {}, pct: {}, total: null }; });
+  var CO = c.cos.map(function (x) { return x.co; });
+  var share = function (vals) {
+    var v = vals.filter(function (x) { return x !== null && x !== undefined; });
+    var at = v.filter(function (x) { return x >= T - 1e-9; }).length;
+    return { at: at, of: v.length, pct: v.length ? Math.round(at / v.length * 10000) / 100 : 0 };
+  };
+  var answered = ind.filter(function (s) { return CO.some(function (k) { return s.ratings[k] !== null && s.ratings[k] !== undefined; }); });
+  var avg = function (vals) {
+    var v = vals.filter(function (x) { return x !== null && x !== undefined; });
+    return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null;
+  };
+  var m = { r: r, c: c, T: T, CO: CO, students: students, ind: ind, answered: answered.length, d: [], i: [], taskAvg: {}, rating: {} };
+  CO.forEach(function (k, idx) {
+    m.d.push(share(students.map(function (s) { return s.co[k]; })));
+    m.i.push(share(answered.map(function (s) { return s.pct[k]; })));
+    var dc = c.direct.cos[idx];
+    m.taskAvg[k] = dc.tasks.map(function (t, j) { return { task: t.task, avg: avg(students.map(function (s) { return s.tasks[k][j]; })) }; });
+    m.rating[k] = avg(answered.map(function (s) { return s.ratings[k]; }));
+  });
+  m.d.push(share(students.map(function (s) { return s.total; })));
+  m.i.push(share(answered.map(function (s) { return s.total; })));
+  return m;
+}
+
+function cadsTexts(m) {
+  var T = m.T, t = { direct: [], indirect: [], compare: [], cqi: [] };
+  var parts = function (k) {
+    return m.taskAvg[k].filter(function (x) { return x.avg !== null; }).map(function (x) { return x.task + ' ' + Math.round(x.avg) + '%'; }).join(', ');
+  };
+  m.CO.forEach(function (k, i) {
+    var d = m.d[i], n = m.i[i];
+    var sorted = m.taskAvg[k].filter(function (x) { return x.avg !== null; }).sort(function (a, b) { return a.avg - b.avg; });
+    var low = sorted[0], high = sorted[sorted.length - 1];
+    t.direct.push(d.pct >= T
+      ? d.at + ' of ' + d.of + ' students (' + d.pct.toFixed(2) + '%) reached the ' + T + '% CO attainment target, so ' + k +
+        ' is attained. Class averages per task: ' + parts(k) + '. The assessment tasks and teaching-learning activities are adequate for ' + k + '.'
+      : 'Only ' + d.at + ' of ' + d.of + ' students (' + d.pct.toFixed(2) + '%) reached the ' + T + '% CO attainment target; ' + k +
+        ' is not attained. Class averages per task: ' + parts(k) + '.' + (low ? ' The lowest is ' + low.task + ' (' + Math.round(low.avg) + '%), so most of the gap comes from it.' : ''));
+    var r = m.rating[k];
+    t.indirect.push(!n.of ? 'No student of this section has answered the survey yet.'
+      : (n.pct >= T
+        ? 'A great majority of students (' + n.pct.toFixed(2) + '%) rated themselves at least ' + T + '% on ' + k + ' (average rating ' + r.toFixed(2) +
+          ' of 5). They feel the assessment tasks and teaching-learning activities helped them attain ' + k + '.'
+        : 'Only ' + n.pct.toFixed(2) + '% of the ' + n.of + ' students who answered rated themselves at least ' + T + '% on ' + k + ' (average rating ' +
+          r.toFixed(2) + ' of 5). Most students feel they have not yet attained ' + k + ' and need more practice on its topics.'));
+    var gap = n.pct - d.pct;
+    t.compare.push(Math.abs(gap) <= 10
+      ? 'For ' + k + ', the direct (' + d.pct.toFixed(2) + '%) and indirect (' + n.pct.toFixed(2) + '%) results are close, so the direct assessment tools agree with how students see their own attainment of ' + k + '.'
+      : (gap > 0
+        ? 'For ' + k + ', more students believe they attained the outcome (' + n.pct.toFixed(2) + '%) than actually reached ' + T + '% in the direct assessment (' +
+          d.pct.toFixed(2) + '%). Students overestimate their mastery; the assessment tasks for ' + k + ' and the feedback given on them should be reviewed so students can judge their own progress better.'
+        : 'For ' + k + ', the direct result (' + d.pct.toFixed(2) + '%) is much higher than the students\' own rating (' + n.pct.toFixed(2) +
+          '%). Students underrate themselves, or the direct result is driven by a task that is easier than the others; the ' + k + ' tasks should be checked for consistency.'));
+    var finding, action;
+    if (d.pct < T) {
+      finding = k + ' not attained (' + d.pct.toFixed(2) + '%). Lowest tasks: ' + sorted.slice(0, 2).map(function (x) { return x.task + ' ' + Math.round(x.avg) + '%'; }).join(', ') + '.';
+      action = 'Re-teach the weakest ' + k + ' topics with more solved examples and seatwork; give a short formative quiz after each unit with immediate feedback; offer remedial sessions and a make-up unit exam for students below ' + T + '%; review the ' + k + ' exam items with low item analysis results.';
+    } else if (n.of && n.pct < T) {
+      finding = k + ' attained directly (' + d.pct.toFixed(2) + '%) but only ' + n.pct.toFixed(2) + '% of students rate themselves ' + T + '% or higher.' +
+        (low && high && high.avg - low.avg >= 30 ? ' The tasks disagree: ' + high.task + ' ' + Math.round(high.avg) + '% but ' + low.task + ' ' + Math.round(low.avg) + '%.' : '');
+      action = 'Validate the ' + k + ' assessment tasks against each other (same table of specifications, proctored conditions); add worked drills and short quizzes with feedback on the ' + k + ' topics so students gain confidence.';
+    } else {
+      finding = k + ' attained in both direct (' + d.pct.toFixed(2) + '%) and indirect (' + n.pct.toFixed(2) + '%) assessment.';
+      action = 'Keep the current teaching-learning activities and assessment tasks for ' + k + '.';
+      if (low && high && high.avg - low.avg >= 30) {
+        finding += ' The tasks disagree: ' + high.task + ' ' + Math.round(high.avg) + '% but ' + low.task + ' ' + Math.round(low.avg) + '%.';
+        action += ' Check that the ' + high.task + ' items for ' + k + ' match the ' + low.task + ' items in difficulty (same table of specifications, proctored conditions), and review the ' + k + ' topics before the ' + low.task + ' with more problem solving.';
+      }
+    }
+    t.cqi.push({ co: k, finding: finding, action: action });
+  });
+  var od = m.d[m.d.length - 1];
+  t.cqi.push({ co: 'All COs',
+    finding: od.at + ' of ' + od.of + ' students (' + od.pct.toFixed(2) + '%) reached ' + T + '% total CO attainment; ' + m.answered + ' of ' + m.students.length + ' students answered the survey.',
+    action: 'Monitor attainment per CO after every unit exam instead of only at term end; schedule consultation hours before each unit exam; ask every student to answer the survey before grades are released.' });
+  return t;
+}
+
+/** Plain SVG bar chart in the template's style. series: [{ name, color, values }] */
+function cadsChart(title, cats, series, h) {
+  var W = 600, H = h || 300, L = 62, R = 16, top = 46, bottom = series.length > 1 ? 66 : 40;
+  var ph = H - top - bottom, pw = W - L - R, n = cats.length, gw = pw / n;
+  var bw = Math.min(56, (gw * 0.6) / series.length);
+  var y = function (v) { return top + ph - Math.max(0, Math.min(100, v || 0)) / 100 * ph; };
+  var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" font-family="Calibri,Carlito,Arial,sans-serif">' +
+    '<rect width="' + W + '" height="' + H + '" fill="#fff"/>' +
+    '<text x="' + W / 2 + '" y="28" text-anchor="middle" font-size="18" fill="#595959">' + esc(title) + '</text>';
+  for (var g = 0; g <= 100; g += 20) {
+    s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(g) + '" y2="' + y(g) + '" stroke="#d9d9d9"/>' +
+      '<text x="' + (L - 8) + '" y="' + (y(g) + 4) + '" text-anchor="end" font-size="11" fill="#595959">' + g.toFixed(2) + '</text>';
+  }
+  s += '<text transform="translate(16 ' + (top + ph / 2) + ') rotate(-90)" text-anchor="middle" font-size="12" fill="#595959">% of Students</text>';
+  cats.forEach(function (cat, i) {
+    var cx = L + gw * i + gw / 2, x0 = cx - bw * series.length / 2;
+    series.forEach(function (se, j) {
+      var v = se.values[i], x = x0 + j * bw;
+      s += '<rect x="' + (x + 1) + '" y="' + y(v) + '" width="' + (bw - 2) + '" height="' + (top + ph - y(v)) + '" fill="' + se.color + '"/>' +
+        '<text x="' + (x + bw / 2) + '" y="' + (y(v) - 5) + '" text-anchor="middle" font-size="11" fill="#404040">' + cadsNum(v) + '</text>';
+    });
+    s += '<text x="' + cx + '" y="' + (top + ph + 18) + '" text-anchor="middle" font-size="12" fill="#595959">' + esc(cat) + '</text>';
+  });
+  if (series.length > 1) {
+    var lx = W / 2 - series.length * 80;
+    series.forEach(function (se, j) {
+      s += '<rect x="' + (lx + j * 170) + '" y="' + (H - 24) + '" width="11" height="11" fill="' + se.color + '"/>' +
+        '<text x="' + (lx + j * 170 + 16) + '" y="' + (H - 14) + '" font-size="12" fill="#595959">' + esc(se.name) + '</text>';
+    });
+  }
+  return '<div class="chart">' + s + '</svg></div>';
+}
+
+/** The report as a list of pieces: { html, brk (new page first) }. */
+function cadsPieces(m, tx) {
+  var c = m.c, info = c.info, sec = m.r.section, T = m.T, P = [];
+  var add = function (html, brk) { P.push({ html: html, brk: !!brk }); };
+  var semLine = info.semester + ' Semester, S.Y. ' + info.schoolYear;
+  var rowsOf = function (list, size) { var out = []; for (var i = 0; i < list.length; i += size) out.push(list.slice(i, i + size)); return out; };
+
+  // I. course information
+  add('<div class="title">COURSE ASSESSMENT DATA SHEET</div>' +
+    '<div class="h1"><span>I.</span><u>COURSE INFORMATION</u></div>' +
+    '<table style="width:86%;margin-left:14%"><tbody>' +
+    [['COURSE CODE', info.courseCode], ['COURSE TITLE', info.courseTitle], ['COURSE AND YEAR', sec.name],
+      ['SEMESTER / S.Y.', semLine], ['INSTRUCTOR', info.instructor], ['NUMBER OF STUDENTS', String(m.students.length)],
+      ['ATTAINMENT TARGET', T + '% CO attainment per student (passing)']]
+      .map(function (r) { return '<tr><td style="width:36%">' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>'; }).join('') +
+    '</tbody></table>');
+
+  // II.A plan
+  add('<div class="h1"><span>II.</span><u>DIRECT ASSESSMENT</u></div><div class="h2">A.&nbsp; <u>Course Outcome Assessment Plan</u></div>' +
+    '<table><thead><tr class="g"><th style="width:10%">CO</th><th>Course Outcome</th><th style="width:16%">Weight in lecture grade</th></tr></thead><tbody>' +
+    c.cos.map(function (x) { return '<tr><td class="c">' + esc(x.co) + '</td><td>' + esc(x.text) + '</td><td class="c">' + esc(x.weight) + '</td></tr>'; }).join('') +
+    '</tbody></table>');
+  var name = {};
+  c.components.forEach(function (x) { name[x.code] = x.name; });
+  var hours = c.units.reduce(function (a, u) { return a + (Number(u.hours) || 0); }, 0);
+  add('<table style="border:0"><tr><td style="border:0;padding:0;width:52%;vertical-align:top">' +
+    '<table><thead><tr class="g"><th colspan="3">GRADING SYSTEM</th></tr><tr class="g"><th>Code</th><th>Assessment Task</th><th>%</th></tr></thead><tbody>' +
+    c.components.map(function (x) { return '<tr><td class="c">' + esc(x.code) + '</td><td>' + esc(x.name) + '</td><td class="c">' + esc(x.weight) + '</td></tr>'; }).join('') +
+    '<tr><td></td><td class="b">Total</td><td class="c b">100%</td></tr></tbody></table></td>' +
+    '<td style="border:0;padding:0 0 0 14px;vertical-align:top">' + (c.units.length
+      ? '<table><thead><tr class="g"><th colspan="3">TIME</th></tr><tr class="g"><th>Unit</th><th>CO</th><th>Hours</th></tr></thead><tbody>' +
+        c.units.map(function (u) { return '<tr><td class="c">' + esc(u.unit) + '</td><td class="c">' + esc(u.co) + '</td><td class="c">' + esc(u.hours) + '</td></tr>'; }).join('') +
+        '<tr><td class="c b" colspan="2">Total</td><td class="c b">' + hours + '</td></tr></tbody></table>' : '') +
+    '</td></tr></table>');
+  var groups = [], cur = null;
+  c.plan.forEach(function (p) { if (p.co || !cur) { cur = { co: p.co, total: p.coTotal, rows: [] }; groups.push(cur); } cur.rows.push(p); });
+  add('<table><thead><tr class="g"><th style="width:9%">CO</th><th>Assessment Task</th><th style="width:9%">I/E/D</th><th style="width:9%">C/P/A</th><th style="width:16%">% of grade (%AT)</th><th style="width:13%">CO total</th></tr></thead><tbody>' +
+    groups.map(function (g) {
+      return g.rows.map(function (p, i) {
+        return '<tr>' + (i ? '' : '<td class="c" rowspan="' + g.rows.length + '">' + esc(g.co) + '</td>') +
+          '<td>' + esc(p.task + (name[p.task] ? ' – ' + name[p.task] : '')) + '</td><td class="c">' + esc(c.ied[p.task] || 'I') + '</td>' +
+          '<td class="c">' + esc(p.cpa) + '</td><td class="c">' + esc(p.weight) + '</td>' +
+          (i ? '' : '<td class="c" rowspan="' + g.rows.length + '">' + esc(g.total) + '</td>') + '</tr>';
+      }).join('');
+    }).join('') + '<tr><td colspan="4" style="border:0"></td><td class="c b">Total</td><td class="c b">100.0%</td></tr></tbody></table>' +
+    '<div class="note">I = Introduced, E = Enhanced, D = Demonstrated · C = Cognitive, P = Psychomotor, A = Affective.</div>');
+
+  // II.B class record (chunks of 30 students, header repeated)
+  var dcos = c.direct.cos;
+  var banner = function (what) {
+    return '<tr class="g"><td colspan="99" class="banner">MARIANO MARCOS STATE UNIVERSITY<br>' + esc(info.college) + '<br>' + esc(info.department) +
+      '<br><br>Course Outcome Assessment<br>' + what + '<br><span style="font-weight:400">' + esc(info.courseCode + ' ' + info.courseTitle + ' · ' + sec.name + ' · ' + semLine) + '</span></td></tr>';
+  };
+  var recHead = banner('Direct Assessment') +
+    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attainment</th></tr>' +
+    '<tr class="g"><th>%CO</th>' + dcos.map(function (d) { return '<td class="c" colspan="' + (d.tasks.length + 1) + '">' + esc(d.weight) + '</td>'; }).join('') + '</tr>' +
+    '<tr class="g"><th>ASSESSMENT TASK</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<th>' + esc(t.task) + '</th>'; }).join('') + '<th class="y">%' + esc(d.co) + '</th>'; }).join('') + '</tr>' +
+    '<tr class="g"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(t.weight) + '</td>'; }).join('') + '<td class="c y">' + esc(d.pctWeight) + '</td>'; }).join('') + '</tr>' +
+    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td></tr>';
+  rowsOf(m.students, 30).forEach(function (chunk, ci) {
+    add((ci ? '' : '<div class="h2">B.&nbsp; <u>Course Outcome Assessment Class Record</u></div>') +
+      '<table class="small">' + recHead + chunk.map(function (s, i) {
+        return '<tr><td class="c">' + (ci * 30 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
+          return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsNum(v) + '</td>'; }).join('') + '<td class="c y">' + cadsNum(s.co[d.co]) + '</td>';
+        }).join('') + '<td class="c y">' + cadsNum(s.total) + '</td></tr>';
+      }).join('') + '</table>' +
+      (ci === Math.ceil(m.students.length / 30) - 1 ? '<div class="note">Blank = no score recorded yet (left out, the same as the portal’s running grade).</div>' : ''), ci === 0);
+  });
+  var sumTable = function (s) {
+    return '<table><tr class="g"><td style="width:40%"></td>' + m.CO.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '<th>All COs</th></tr>' +
+      '<tr><td>Number of Students Achieving CO Attainment of ' + T + '%</td>' + s.map(function (x) { return '<td class="c y">' + x.at + '</td>'; }).join('') + '</tr>' +
+      '<tr><td>Total Number of Students' + (s === m.i ? ' (answered the survey)' : '') + '</td>' + s.map(function (x) { return '<td class="c y">' + x.of + '</td>'; }).join('') + '</tr>' +
+      '<tr><td class="b">Percentage of Students Achieving CO Attainment of ' + T + '%</td>' + s.map(function (x) { return '<td class="c y b">' + x.pct.toFixed(2) + '</td>'; }).join('') + '</tr></table>';
+  };
+  add(sumTable(m.d));
+
+  // II.C analysis
+  var field = function (name, text, h) {
+    return '<td class="fld hide" data-field="' + esc(name) + '" style="height:' + h + 'px">' + esc(text) + '</td>';
+  };
+  var commentTable = function (prefix, vals, texts) {
+    return '<table><tr class="g"><th style="width:34%">Course Outcome</th><th style="width:15%">Attainment</th><th>Comment</th></tr>' +
+      c.cos.map(function (x, i) {
+        return '<tr><td>' + esc(x.co + '. ' + x.text) + '</td><td class="c">' + cadsPct(vals[i].pct) + '</td>' + field(prefix + '_' + x.co, texts[i], 130) + '</tr>';
+      }).join('') + '</table>';
+  };
+  add('<div class="h2">C.&nbsp; <u>Analysis and Graphs</u></div>' +
+    cadsChart('Percentage of Students Achieving CO Attainment of ' + T + '%', m.CO, [{ name: 'Direct', color: CADS.BLUE, values: m.d.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]), true);
+  add(commentTable('direct_comment', m.d, tx.direct));
+
+  // III.A form
+  var scale = c.scale;
+  var formRows = [];
+  m.CO.forEach(function (k) {
+    var co = c.cos.filter(function (x) { return x.co === k; })[0];
+    formRows.push('<tr style="background:#E2EFDA"><td colspan="' + (scale.length + 1) + '" class="b">' + esc(k + '. ' + co.text) + '</td></tr>');
+    c.statements.filter(function (s) { return s.co === k; }).forEach(function (s) {
+      formRows.push('<tr><td>' + esc(s.text) + '</td>' + scale.map(function () { return '<td></td>'; }).join('') + '</tr>');
+    });
+  });
+  var formHead = '<tr class="g"><th>Assessment Criteria</th>' + scale.map(function (x) { return '<th style="width:11%">' + esc(x.label) + '<br>' + x.n + '</th>'; }).join('') + '</tr>';
+  rowsOf(formRows, 17).forEach(function (chunk, ci) {
+    add((ci ? '' : '<div class="h1"><span>III.</span><u>INDIRECT ASSESSMENT</u></div><div class="h2">A.&nbsp; <u>Indirect Assessment Form</u></div>' +
+      '<p class="body">Based on your experience taking this course, activities both synchronous and asynchronous, at what level would you RATE yourself now on the following?</p>') +
+      '<table>' + formHead + chunk.join('') + '</table>', ci === 0);
+  });
+
+  // III.B result
+  var resHead = banner('Indirect Assessment') +
+    '<tr class="g"><th style="width:5%">No.</th><th style="text-align:left">Student</th>' + m.CO.map(function (k) { return '<th>' + esc(k) + '<br>rating</th>'; }).join('') +
+    m.CO.map(function (k) { return '<th class="y">%' + esc(k) + '</th>'; }).join('') + '<th class="y">%CO</th></tr>' +
+    '<tr class="g"><td></td><td>%CO weight</td>' + m.CO.map(function () { return '<td></td>'; }).join('') +
+    c.cos.map(function (x) { return '<td class="c y">' + esc(x.weight) + '</td>'; }).join('') + '<td class="c y">100%</td></tr>';
+  rowsOf(m.ind, 34).forEach(function (chunk, ci) {
+    add((ci ? '' : '<div class="h2">B.&nbsp; <u>Indirect Assessment Result</u></div>') + '<table class="small">' + resHead + chunk.map(function (s, i) {
+      var none = !m.CO.some(function (k) { return s.ratings[k] !== null && s.ratings[k] !== undefined; });
+      return '<tr><td class="c">' + (ci * 34 + i + 1) + '</td><td>' + esc(s.name) + '</td>' + (none
+        ? '<td class="c" colspan="' + (m.CO.length * 2 + 1) + '"><i>no response</i></td>'
+        : m.CO.map(function (k) { return '<td class="c">' + cadsNum(s.ratings[k]) + '</td>'; }).join('') +
+          m.CO.map(function (k) { return '<td class="c y">' + cadsNum(s.pct[k]) + '</td>'; }).join('') + '<td class="c y">' + cadsNum(s.total) + '</td>') + '</tr>';
+    }).join('') + '</table>', ci === 0);
+  });
+  add(sumTable(m.i));
+  add('<div class="h2">C.&nbsp; <u>Analysis and Graphs</u></div>' +
+    cadsChart('Course Outcomes Self-Assessment', m.CO, [{ name: 'Indirect', color: CADS.BLUE, values: m.i.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]), true);
+  add(commentTable('indirect_comment', m.i, tx.indirect));
+
+  // IV comparison
+  add('<div class="h1"><span>IV.</span><u>COMPARISON OF DIRECT AND INDIRECT ASSESSMENT</u></div><div class="h2">A.&nbsp; <u>Analysis and Graphs</u></div>' +
+    '<table><tr class="g"><th style="width:28%">CO</th>' + m.CO.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '<th>Overall</th></tr>' +
+    '<tr><td class="b">Direct Assessment</td>' + m.d.map(function (x) { return '<td class="c y">' + x.pct.toFixed(2) + '</td>'; }).join('') + '</tr>' +
+    '<tr><td class="b">Indirect Assessment</td>' + m.i.map(function (x) { return '<td class="c y">' + x.pct.toFixed(2) + '</td>'; }).join('') + '</tr></table>', true);
+  add(cadsChart('CO Attainment', m.CO, [
+    { name: 'Direct Assessment', color: CADS.BLUE, values: m.d.slice(0, m.CO.length).map(function (x) { return x.pct; }) },
+    { name: 'Indirect Assessment', color: CADS.ORANGE, values: m.i.slice(0, m.CO.length).map(function (x) { return x.pct; }) }], 290));
+  add(cadsChart('Overall', ['Direct Assessment', 'Indirect Assessment'], [{ name: 'Overall', color: CADS.BLUE,
+    values: [m.d[m.d.length - 1].pct, m.i[m.i.length - 1].pct] }], 240));
+  add('<div class="b" style="margin-bottom:4px">Analysis</div><table style="border:0"><tr>' +
+    field('comparison_analysis', tx.compare.join('\n\n'), 230).replace('<td class="fld', '<td style="border:0" class="fld') + '</tr></table>');
+
+  // V CQI + signatures
+  add('<div class="h1"><span>V.</span><u>ACTIONS FOR CONTINUOUS QUALITY IMPROVEMENT (CQI)</u></div>' +
+    '<table><tr class="g"><th style="width:12%">CO</th><th style="width:38%">Finding</th><th>Action for CQI</th></tr>' +
+    tx.cqi.map(function (q) {
+      return '<tr><td class="c b">' + esc(q.co) + '</td>' + field('cqi_finding_' + q.co, q.finding, 128) + field('cqi_action_' + q.co, q.action, 128) + '</tr>';
+    }).join('') + '</table>', true);
+  var sg = m.r.signatories;
+  var sig = function (n, role) { return '<div style="border-top:1px solid #000;margin-top:42px;padding-top:2px;text-align:center"><b>' + esc(String(n).toUpperCase()) + '</b><br>' + esc(role) + '</div>'; };
+  add('<table class="sig" style="margin-top:26px"><tr><td style="width:42%">Prepared by:' + sig(sg.prepared, 'Instructor') + '</td><td></td>' +
+    '<td style="width:42%">Noted by:' + sig(sg.chair, 'Department Chair, EE') + sig(sg.dean, 'Dean, COE') + '</td></tr></table>');
+  return P;
+}
+
+/** Builds the PDF bytes for admin.cads data. */
+function buildCadsPdf(r) {
+  var m = cadsModel(r), tx = cadsTexts(m), pieces = cadsPieces(m, tx);
+  var box = document.createElement('div');
+  box.className = 'cads';
+  box.innerHTML = '<style>' + CADS_CSS + '</style>' + pieces.map(function (p, i) { return '<div class="pc" data-i="' + i + '">' + p.html + '</div>'; }).join('');
+  document.body.appendChild(box);
+  var libs;
+  return Promise.all([loadScriptOnce(PDF_LIBS.pdfLib, 'PDFLib'), loadScriptOnce(PDF_LIBS.htmlToImage, 'htmlToImage')]).then(function (l) {
+    libs = { pdf: l[0], img: l[1] };
+    var shots = [], chain = Promise.resolve();
+    $$('.pc', box).forEach(function (el, i) {
+      chain = chain.then(function () {
+        var base = el.getBoundingClientRect();
+        var fields = $$('[data-field]', el).map(function (f) {
+          var b = f.getBoundingClientRect();
+          return { name: f.dataset.field, text: f.textContent, x: b.left - base.left, y: b.top - base.top, w: b.width, h: b.height };
+        });
+        return libs.img.toPng(el, { pixelRatio: 2.2, backgroundColor: '#ffffff', skipFonts: true, cacheBust: false })
+          .then(function (png) { shots.push({ png: png, w: el.offsetWidth, h: el.offsetHeight, brk: pieces[i].brk, fields: fields }); });
+      });
+    });
+    return chain.then(function () { return shots; });
+  }).then(function (shots) {
+    var Pd = libs.pdf, A = r.assets || {};
+    return Pd.PDFDocument.create().then(function (doc) {
+      var title = 'Course Assessment Data Sheet - ' + m.c.info.courseCode + ' - ' + r.section.name;
+      doc.setTitle(title); doc.setAuthor(m.c.info.instructor || ''); doc.setCreator('EE Grades Portal');
+      var W = CADS.PAGE_W, H = CADS.PAGE_H, X = CADS.MARGIN, CW = W - 2 * X, k = CW / CADS.PX;
+      var form = doc.getForm();
+      var embed = function (uri) {
+        if (!uri) return Promise.resolve(null);
+        return /^data:image\/png/.test(uri) ? doc.embedPng(uri) : doc.embedJpg(uri);
+      };
+      return Promise.all([embed(A.header), embed(A.footer), doc.embedFont(Pd.StandardFonts.Helvetica)].concat(
+        shots.map(function (s) { return doc.embedPng(s.png); }))).then(function (e) {
+        var head = e[0], foot = e[1], font = e[2], imgs = e.slice(3);
+        var page = null, y = 0, n = 0;
+        var newPage = function () {
+          page = doc.addPage([W, H]); n++;
+          if (head) { var hh = W * (A.headerRatio || 0.1435); page.drawImage(head, { x: 0, y: H - hh - 8, width: W, height: hh }); }
+          if (foot) { var fh = W * (A.footerRatio || 0.0918); page.drawImage(foot, { x: 0, y: 18, width: W, height: fh }); }
+          y = H - CADS.TOP;
+        };
+        imgs.forEach(function (img, i) {
+          var s = shots[i], h = s.h * k;
+          var room = H - CADS.TOP - CADS.BOTTOM;
+          var scale = h > room ? room / h : 1;
+          if (!page || s.brk || y - h * scale < CADS.BOTTOM) newPage();
+          var w = CW * scale, x = X + (CW - w) / 2, top = y;
+          page.drawImage(img, { x: x, y: top - h * scale, width: w, height: h * scale });
+          s.fields.forEach(function (f) {
+            var tf = form.createTextField(f.name.replace(/[^\w]/g, '_') + '_' + i);
+            tf.enableMultiline();
+            tf.setText(f.text);
+            tf.addToPage(page, {
+              x: x + (f.x + 3) * k * scale, y: top - (f.y + f.h - 2) * k * scale,
+              width: (f.w - 6) * k * scale, height: (f.h - 4) * k * scale,
+              font: font, borderWidth: 0, borderColor: undefined, backgroundColor: undefined, textColor: Pd.rgb(0, 0, 0)
+            });
+            tf.setFontSize(9.5);
+          });
+          y = top - h * scale - 4;
+        });
+        form.updateFieldAppearances(font);
+        doc.getPages().forEach(function (p, i, all) {
+          var t = 'Course Assessment Data Sheet · ' + m.c.info.courseCode + ' · ' + r.section.name + ' · page ' + (i + 1) + ' of ' + all.length;
+          var tw = font.widthOfTextAtSize(t, 7.5);
+          p.drawText(t, { x: W - X - tw, y: 80, size: 7.5, font: font, color: Pd.rgb(0.5, 0.5, 0.5) });
+        });
+        return doc.save();
+      });
+    });
+  }).then(function (bytes) { box.remove(); return bytes; }, function (err) { box.remove(); throw err; });
+}
+
+function downloadCads(sectionId, btn) {
+  if (!sectionId) { toast('Pick a section first — the data sheet is made per section.', 'error'); return; }
+  busy(btn, true, 'Making the data sheet…');
+  call('admin.cads', { sectionId: sectionId })
+    .then(function (r) { return buildCadsPdf(r).then(function (bytes) { return { r: r, bytes: bytes }; }); })
+    .then(function (x) {
+      busy(btn, false);
+      var name = ('Course Assessment Data Sheet - ' + x.r.course.info.courseCode + ' - ' + x.r.section.name).replace(/[\\/:*?"<>|]+/g, ' ') + '.pdf';
+      downloadBytes(x.bytes, name, 'application/pdf');
+      toast('Downloaded: ' + name);
+    })
+    .catch(function (err) {
+      busy(btn, false);
+      toast(err.message || 'The data sheet could not be made.', 'error');
     });
 }
 

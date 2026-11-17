@@ -88,7 +88,31 @@ change log at the bottom for every change you ship.
   admin "Indirect assessment" tab READS the workbook (never writes) — tabs
   Indirect Assessment, Survey Responses, Comparison, Survey Items, found by
   their labels — cached 5 min (↻ Refresh clears it). `checkIndirectAssessment()`
-  logs the same data from the editor.
+  logs the same data from the editor. Workbooks in the **department-template
+  layout** (EE121's since Nov 2026: tabs Setup, Course Assessment Plan, Direct
+  Assessment, Indirect Assessment, Comparison, Final Grade, …) are read by
+  `CourseAssessment.js` instead (`isCourseTemplate_` → `readCourseWorkbook_` →
+  `indirectFromCourse_`): per-student rows only, section + student number from
+  **Final Grade** (matched by name), counts worked out at Setup's
+  "Attainment target per student" (`out.target`, now **50%** = passing; the
+  Indirect tab's labels follow it), direct %CO per student so direct
+  attainment is per section too, survey responders mapped to sections by
+  student number, lab-only CO statements (CO4) dropped.
+- `CourseAssessment.js` + `CadsAssets.js` — **Course Assessment Data Sheet**
+  (button "⬇ Course Assessment Data Sheet" on the Indirect tab; needs a section
+  picked): `admin.cads {sectionId}` returns the parsed workbook, the section,
+  signatories (instructor from Setup; Chair/Dean = Settings
+  `SUMMARY_CHAIR_NAME` / `SUMMARY_DEAN_NAME`, defaults Rigor G. Gabur / Sharona
+  Q. Barroga) and the College header/footer images (`CADS_ASSETS`, taken from
+  the Program Assessment Data Sheet template). The browser (`buildCadsPdf` in
+  App.html) builds 8.5×13 in pages in the template's order — I Course
+  information, II Direct (plan, class record, attainment, chart + comments),
+  III Indirect (form, results, chart + comments), IV Comparison (+ analysis),
+  V Actions for CQI, Prepared by / Noted by — pieces captured with
+  html-to-image, placed with pdf-lib; comments, analysis and CQI are written
+  from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
+  owner can change the wording in a PDF reader. Nothing on the page mentions
+  editing (owner's request: it must read as a final report).
 - `DirectAssessment.js` — admin "Direct assessment" tab (`admin.direct`,
   `admin.direct.refresh`): every class's requirements + per-student scores,
   percent, grade and standing for a semester, cached 5 min per class
@@ -394,4 +418,10 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-14 11:45** — Signing key created on the owner's laptop
   (Documents\EE-Grades-Key, alias `ee-grades`, RSA 4096, PKCS12, ~27 years);
   the owner added the three secrets. Merging this releases **v1.2.0**.
-
+- **2026-11-17** — Data: EE121 workbook Setup "Attainment target per student"
+  70% → **50%** (passing), owner's request. Portal deployment version 24:
+  Indirect tab reads the department-template workbook again (it had changed
+  layout) at the workbook's target, direct attainment per section; new
+  per-section **Course Assessment Data Sheet** PDF (`CourseAssessment.js`,
+  `CadsAssets.js`). Verified: `checkIndirectAssessment()` on the live workbook
+  = workbook Comparison tab (CO1 92.94/13.48, CO2 80/20.69, CO3 71.76/94.25).

@@ -172,6 +172,8 @@ function route_(action, p, token) {
       return indirectDashboard_(requireSession_(token, 'admin'), p.semesterId);
     case 'admin.indirect.refresh':
       return refreshIndirect_(requireSession_(token, 'admin'), p.semesterId);
+    case 'admin.cads':
+      return courseAssessmentSheet_(requireSession_(token, 'admin'), p.sectionId, p.fresh === true);
     case 'admin.materials':
       return adminMaterials_(requireSession_(token, 'admin'), p.sectionId);
     case 'admin.materials.upload':
