@@ -482,6 +482,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-17 21:33** — Portal deployment version 27: exam "Questions
   shown" setting (all on one page / one at a time / one at a time with no
   going back, enforced on the server).
-- **2026-11-17** — Saved in the editor, NOT deployed yet: separate "Course
+- **2026-11-17 21:59** — Portal deployment version 28: separate "Course
   Assessment Data Sheet" tab with an on-screen preview (button removed from
   the Indirect tab).
