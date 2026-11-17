@@ -191,8 +191,12 @@ change log at the bottom for every change you ship.
   CacheService only (`ans:<attemptId>`, also localStorage in the browser).
   Unsubmitted attempts past the deadline are scored from the autosave
   (`finalizeExpired_`). Scores reach the gradebook only via
-  `syncExamScores_` (on Release, on opening Results, hourly in
-  `scheduledRosterSync` → `finalizeAndSyncExams_`), scaled to the column max.
+  `syncExamScores_` (on Release, on opening Results, and the admin's
+  "⇩ Copy scores" / "⇩ Copy all scores to class record" buttons in 🧪 Exams →
+  `admin.exam.sync` / `syncExamNow_`; unreleased RELEASED-mode exams are
+  skipped and named), scaled to the column max. **No hourly trigger** (owner's
+  choice, to keep the system fast) — don't run `installTriggers()` unless the
+  owner asks.
   Admin: "🧪 Exams" → bank status/link, new exam, Results (status, score,
   "Left exam" count — live from the autosave while running, Reset attempt,
   Release scores, item analysis by question and Unit × Level).
@@ -496,3 +500,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   The hourly trigger (`scheduledRosterSync`) is still NOT installed — the
   project has 0 triggers, so exam scores copy only on Results/Release. The
   owner must run `installTriggers()` in the editor once.
+- **2026-11-17 23:17** — Portal deployment version 30: "⇩ Copy scores" per exam and
+  "⇩ Copy all scores to class record" in 🧪 Exams. Owner decided against the
+  hourly trigger; the project has 0 triggers and stays that way.

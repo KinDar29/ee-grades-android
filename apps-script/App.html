@@ -2210,6 +2210,8 @@ function manageExams(section) {
         '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="xCreate">Create exam</button></div></div></details>';
     }
 
+    if (data.exams.length) html += '<div class="row" style="margin-top:10px"><span class="small muted">Exam scores go into the class record when you press Copy (or open Results / Release).</span><div class="spacer"></div>' +
+      '<button class="btn sm" id="xSyncAll">⇩ Copy all scores to class record</button></div>';
     html += '<div class="file-list" style="margin-top:8px">' + data.exams.map(function (e) {
       var st = { upcoming: '<span class="badge grey">Upcoming</span>', open: '<span class="badge green">Open now</span>', closed: '<span class="badge">Closed</span>' }[e.state];
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
@@ -2218,6 +2220,7 @@ function manageExams(section) {
         ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + ' · ' + navLabel(e.navigation) + '</div>' +
         '<div class="small" style="margin-top:3px">' + e.counts.submitted + ' / ' + e.counts.students + ' submitted · ' + (e.counts.started - e.counts.submitted) + ' in progress</div></div>' +
         '<div class="file-acts"><button class="btn sm primary" data-res="' + esc(e.id) + '">Results</button>' +
+        '<button class="btn sm" data-xsync="' + esc(e.id) + '" title="Copy this exam\'s scores to the class record">⇩ Copy scores</button>' +
         '<button class="btn sm" data-xedit="' + esc(e.id) + '">Edit</button>' +
         '<button class="btn sm ghost" data-xrm="' + esc(e.id) + '" title="Remove">✕</button></div></div>';
     }).join('') + '</div>';
@@ -2257,6 +2260,18 @@ function manageExams(section) {
       run('admin.exam.create', p, 'Exam created.').then(list).catch(function () { busy(xc, false); });
     });
     $$('[data-res]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { results(this.dataset.res); }); });
+    function copyScores(btn, examId) {
+      busy(btn, true, 'Copying…');
+      call('admin.exam.sync', { sectionId: section.id, examId: examId || '' }).then(function (r) {
+        busy(btn, false);
+        var msg = r.copied ? r.copied + ' score' + (r.copied === 1 ? '' : 's') + ' copied to the class record.' : 'Class record already up to date.';
+        if (r.notReleased.length) msg += ' Not copied (scores not released yet): ' + r.notReleased.join(', ') + '.';
+        toast(msg, r.notReleased.length && !r.exams.length ? 'error' : undefined);
+      }).catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+    }
+    $$('[data-xsync]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { copyScores(this, this.dataset.xsync); }); });
+    var sa = $('#xSyncAll', M.body);
+    if (sa) sa.addEventListener('click', function () { copyScores(sa, ''); });
     $$('[data-xedit]', M.body).forEach(function (b2) { b2.addEventListener('click', function () { editExam(this.dataset.xedit); }); });
     $$('[data-xrm]', M.body).forEach(function (b2) {
       b2.addEventListener('click', function () {
