@@ -301,10 +301,12 @@ function removeAssignment_(session, sectionId, id) {
       }
     });
     rows.sort(function (x, y) { return y._row - x._row; }).forEach(function (r) { sub.deleteRow(r._row); });
+    bumpTab_(sub);
     if (a.folderId) { try { DriveApp.getFolderById(a.folderId).setTrashed(true); } catch (err) { /* gone */ } }
     var sh = tab_(SUBMIT.ASSIGN_TAB);
     var row = findRow_(sh, 'Assignment ID', a.id);
     if (row) sh.deleteRow(row._row);
+    bumpTab_(sh);
     logAction_(session.id, session.role, 'ASSIGNMENT_REMOVE', sectionId, { id: a.id, title: a.title, files: rows.length });
     return adminAssignments_(session, sectionId);
   });
@@ -401,9 +403,11 @@ function getSubmissionFile_(session, sectionId, assignmentId, studentId) {
 
 /** The class's open assignments for the student class page. */
 function studentAssignments_(sectionId, me, assessments) {
-  var list = assignmentsOf_(sectionId).filter(function (a) { return a.open; });
+  var list = sectionRows_(SUBMIT.ASSIGN_TAB, sectionId).map(assignmentOut_)
+    .filter(function (a) { return a.open; })
+    .sort(function (a, b) { return a.dueAt < b.dueAt ? -1 : (a.dueAt > b.dueAt ? 1 : 0); });
   if (!list.length) return [];
-  var subs = readTable_(tab_(SUBMIT.TAB)).rows;
+  var subs = sectionRows_(SUBMIT.TAB, sectionId);
   var myId = str_(me.studentId).toLowerCase();
   var now = new Date().getTime();
   return list.map(function (a) {

@@ -161,6 +161,7 @@ function appendObject_(sheet, obj) {
     return TEXT_COLUMNS[key] ? asText_(v) : v;
   });
   sheet.appendRow(row);
+  bumpTab_(sheet);
   return sheet.getLastRow();
 }
 
@@ -177,6 +178,65 @@ function updateObject_(sheet, rowNumber, obj) {
     if (TEXT_COLUMNS[headers[i]]) current[i] = asText_(current[i]);
   }
   sheet.getRange(rowNumber, 1, 1, headers.length).setValues([current]);
+  bumpTab_(sheet);
+}
+
+/* ------------------- cached reads for the student pages ------------------ */
+/*
+ * The class page used to read every row of these master tabs on every open.
+ * sectionRows_ keeps one class's rows (big JSON columns left out) in the
+ * script cache for 5 minutes. Each tab has a version in the cache; every
+ * write through appendObject_ / updateObject_ / a deleteRow site calls
+ * bumpTab_, so the next read sees the change at once. Only the student read
+ * paths use this — exam start/save/submit and all admin pages read live.
+ */
+var ROWS_CACHE_SECONDS = 300;
+var ROWS_CACHE_SKIP = { 'Questions': 1, 'Answers': 1, 'Blueprint': 1, 'Original Scores': 1 };
+
+function cachedTabNames_() {
+  return [EXAMS.TAB, EXAMS.ATTEMPTS, EXAMS.RESULTS, SUBMIT.ASSIGN_TAB, SUBMIT.TAB, MATERIALS.TAB];
+}
+
+function tabVersion_(name, bump) {
+  var cache = CacheService.getScriptCache(), key = 'tv:' + name;
+  var v = bump ? null : cache.get(key);
+  if (!v) { v = uid_('V'); cache.put(key, v, 21600); }
+  return v;
+}
+
+/** Call after any write to a master tab the student pages cache. */
+function bumpTab_(sheet) {
+  try {
+    var name = sheet.getName();
+    if (cachedTabNames_().indexOf(name) > -1) tabVersion_(name, true);
+  } catch (err) { /* cache busy: entries still expire on their own */ }
+}
+
+/** One class's rows of a master tab (read-only copies; no _row, no big JSON columns). */
+function sectionRows_(tabName, sectionId) {
+  var sid = str_(sectionId), cache = null, key = '';
+  try {
+    cache = CacheService.getScriptCache();
+    key = 'rows:' + tabName + ':' + sid + ':' + tabVersion_(tabName);
+    var hit = cache.get(key);
+    if (hit) return JSON.parse(hit);
+  } catch (err) { cache = null; }
+  var rows = readTable_(tab_(tabName)).rows.filter(function (r) {
+    return str_(r['Section ID']) === sid;
+  }).map(function (r) {
+    var o = {};
+    Object.keys(r).forEach(function (k) {
+      if (k === '_row' || ROWS_CACHE_SKIP[k]) return;
+      var v = r[k];
+      o[k] = v instanceof Date ? Utilities.formatDate(v, APP.TIMEZONE, 'yyyy-MM-dd HH:mm:ss') : v;
+    });
+    return o;
+  });
+  if (cache) {
+    var text = JSON.stringify(rows);
+    if (text.length < 95000) { try { cache.put(key, text, ROWS_CACHE_SECONDS); } catch (err) { /* too big */ } }
+  }
+  return rows;
 }
 
 /** Find the first row object whose `key` column equals `value` (case-insensitive). */

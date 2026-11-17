@@ -110,8 +110,11 @@ function materialOut_(r) {
 /** A class's materials in display order. Students see only released ones. */
 function materialsFor_(sectionId, studentView) {
   var sid = str_(sectionId);
-  return materialRows_()
-    .filter(function (r) { return str_(r['Section ID']) === sid; })
+  // students read a cached copy of the class's rows; admins read the tab live
+  var rows = studentView
+    ? (migrateCourseFiles_(), sectionRows_(MATERIALS.TAB, sid))
+    : materialRows_().filter(function (r) { return str_(r['Section ID']) === sid; });
+  return rows
     .map(materialOut_)
     .filter(function (m) { return !studentView || m.released; })
     .sort(function (a, b) { return a.order - b.order; })
@@ -299,6 +302,7 @@ function removeMaterial_(session, sectionId, id) {
     var row = findMaterialRow_(sh, sectionId, id);
     var fileId = str_(row['Drive File ID']);
     sh.deleteRow(row._row);
+    bumpTab_(sh);
     trashIfUnused_(fileId);
     logAction_(session.id, session.role, 'MATERIAL_REMOVE', sectionId, { id: id, title: str_(row['Title']) });
     return adminMaterials_(session, sectionId);

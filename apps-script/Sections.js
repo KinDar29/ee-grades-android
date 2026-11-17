@@ -436,7 +436,37 @@ function sectionSnapshot_(sectionId) {
 }
 
 function clearSectionSnapshot_(sectionId) {
-  try { CacheService.getScriptCache().removeAll([snapshotKey_(sectionId), directKey_(sectionId)]); } catch (err) { /* ignore */ }
+  try {
+    CacheService.getScriptCache().removeAll([snapshotKey_(sectionId), directKey_(sectionId), 'sdata:' + String(sectionId)]);
+  } catch (err) { /* ignore */ }
+}
+
+/**
+ * The class data the student class page needs (section, requirements, every
+ * student's scores), cached like the snapshot: 10 minutes, cleared by
+ * clearSectionSnapshot_ on every portal change, so only edits typed straight
+ * into the class spreadsheet wait for the timeout.
+ */
+function cachedSectionData_(sectionId, fresh) {
+  var cache = null, key = 'sdata:' + String(sectionId);
+  try {
+    cache = CacheService.getScriptCache();
+    if (!fresh) {
+      var hit = cache.get(key);
+      if (hit) return JSON.parse(hit);
+    }
+  } catch (err) { cache = null; }
+  var d = readSectionData_(sectionId, true);
+  var out = {
+    section: d.section,
+    assessments: d.assessments,
+    roster: d.roster.map(function (s) { return { studentId: s.studentId, scores: s.scores }; })
+  };
+  if (cache) {
+    var text = JSON.stringify(out);
+    if (text.length < 95000) { try { cache.put(key, text, SNAPSHOT_SECONDS); } catch (err) { /* too big */ } }
+  }
+  return out;
 }
 
 /** Per-assessment class statistics. */

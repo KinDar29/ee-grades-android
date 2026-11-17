@@ -286,8 +286,11 @@ function updateSection_(session, data) {
     if (data.surveyUrl !== undefined) patch['Survey Link'] = checkSurveyUrl_(data.surveyUrl);
     if (data.workbook !== undefined) patch['Assessment Workbook'] = workbookId_(data.workbook);
     updateObject_(sheet, row._row, patch);
+    clearSectionSnapshot_(data.id);   // class page shows instructor, schedule, survey
     if (patch['Assessment Workbook']) {
-      try { CacheService.getScriptCache().remove('indirect:' + patch['Assessment Workbook']); } catch (err) { /* ignore */ }
+      try {
+        CacheService.getScriptCache().removeAll(['indirect:' + patch['Assessment Workbook'], 'survey:' + patch['Assessment Workbook']]);
+      } catch (err) { /* ignore */ }
     }
 
     // Keep the spreadsheet name and Info tab in step.

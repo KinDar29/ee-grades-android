@@ -355,7 +355,7 @@ function indirectDashboard_(session, semesterId) {
 function refreshIndirect_(session, semesterId) {
   var cache = CacheService.getScriptCache();
   listSections_(str_(semesterId) || str_(settings_()['ACTIVE_SEMESTER_ID'])).forEach(function (sec) {
-    if (sec.workbookId) cache.removeAll(['indirect:' + sec.workbookId, 'course:' + sec.workbookId]);
+    if (sec.workbookId) cache.removeAll(['indirect:' + sec.workbookId, 'course:' + sec.workbookId, 'survey:' + sec.workbookId]);
   });
   return indirectDashboard_(session, semesterId);
 }
@@ -363,12 +363,23 @@ function refreshIndirect_(session, semesterId) {
 /* -------------------------------- student -------------------------------- */
 
 /** { url, submitted } for a student's class, or null when no survey is linked. */
+/** Just the form link and who has answered, cached 10 min for the class page. */
+function surveyStatus_(workbookId) {
+  var cache = CacheService.getScriptCache(), key = 'survey:' + workbookId;
+  var hit = cache.get(key);
+  if (hit) { try { return JSON.parse(hit); } catch (err) { /* rebuild */ } }
+  var wb = readIndirectWorkbook_(workbookId);
+  var out = { formUrl: wb.formUrl || '', responders: wb.responders || [] };
+  try { cache.put(key, JSON.stringify(out), 600); } catch (err) { /* too big */ }
+  return out;
+}
+
 function surveyForStudent_(section, studentId) {
   var url = str_(section.surveyUrl);
   var submitted = null;
   if (section.workbookId) {
     try {
-      var wb = readIndirectWorkbook_(section.workbookId);
+      var wb = surveyStatus_(section.workbookId);
       if (!url) url = wb.formUrl;
       submitted = wb.responders.indexOf(studentKey_(studentId)) > -1;
     } catch (err) {

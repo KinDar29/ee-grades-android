@@ -412,10 +412,12 @@ function removeExam_(session, sectionId, id) {
       readTable_(sh).rows.filter(function (r) { return str_(r['Exam ID']) === e.id; })
         .sort(function (a, b) { return b._row - a._row; })
         .forEach(function (r) { sh.deleteRow(r._row); });
+      bumpTab_(sh);
     });
     var sh = tab_(EXAMS.TAB);
     var row = findRow_(sh, 'Exam ID', e.id);
     if (row) sh.deleteRow(row._row);
+    bumpTab_(sh);
     var stillUsed = readTable_(sh).rows.some(function (r) { return str_(r['Pool File ID']) === e.poolFileId; });
     if (!stillUsed && e.poolFileId) { try { DriveApp.getFileById(e.poolFileId).setTrashed(true); } catch (err) { /* gone */ } }
     logAction_(session.id, session.role, 'EXAM_REMOVE', sectionId, { id: e.id, title: e.title });
@@ -619,6 +621,7 @@ function resetExamAttempt_(session, sectionId, examId, studentId) {
         CacheService.getScriptCache().remove('ans:' + str_(r['Attempt ID']));
         sh.deleteRow(r._row);
       });
+      bumpTab_(sh);
     });
   });
   if (exam.assessmentId) {
@@ -639,10 +642,11 @@ function resetExamAttempt_(session, sectionId, examId, studentId) {
 /* ------------------------------- students -------------------------------- */
 
 function studentExams_(sectionId, studentId, assessments, scores) {
-  var list = examsOf_(sectionId);
+  var list = sectionRows_(EXAMS.TAB, sectionId).map(examOut_)
+    .sort(function (a, b) { return a.opensAt < b.opensAt ? -1 : (a.opensAt > b.opensAt ? 1 : 0); });
   if (!list.length) return [];
   var me = str_(studentId).toLowerCase(), now = new Date().getTime();
-  var attempts = readTable_(tab_(EXAMS.ATTEMPTS)).rows, results = readTable_(tab_(EXAMS.RESULTS)).rows;
+  var attempts = sectionRows_(EXAMS.ATTEMPTS, sectionId), results = sectionRows_(EXAMS.RESULTS, sectionId);
   return list.map(function (e) {
     var att = attempts.filter(function (r) { return str_(r['Exam ID']) === e.id && str_(r['Student ID']).toLowerCase() === me; })[0];
     var res = results.filter(function (r) { return str_(r['Exam ID']) === e.id && str_(r['Student ID']).toLowerCase() === me; })[0];

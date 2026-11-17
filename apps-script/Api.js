@@ -35,7 +35,10 @@ function api(request) {
   var token = request.token || '';
 
   try {
+    var started = new Date().getTime();
     var result = route_(action, payload, token);
+    var took = new Date().getTime() - started;
+    if (took > 3000) console.log('slow ' + action + ' ' + took + ' ms');
     return JSON.stringify({ ok: true, data: result === undefined ? null : result });
   } catch (err) {
     var message = err && err.message ? String(err.message) : String(err);
@@ -332,17 +335,23 @@ function studentHome_(session) {
 
 function studentClass_(session, sectionId) {
   if (session.role !== 'student') throw new Error('AUTH:Please sign in as a student.');
+  var t0 = new Date().getTime(), ms = {};
   var s = settings_();
-  var data = readSectionData_(sectionId, true);
-
-  var me = null;
-  for (var i = 0; i < data.roster.length; i++) {
-    if (data.roster[i].studentId.toLowerCase() === String(session.id).toLowerCase()) {
-      me = data.roster[i];
-      break;
+  var data = cachedSectionData_(sectionId);
+  var findMe = function () {
+    for (var i = 0; i < data.roster.length; i++) {
+      if (data.roster[i].studentId.toLowerCase() === String(session.id).toLowerCase()) return data.roster[i];
     }
+    return null;
+  };
+  var me = findMe();
+  if (!me) {
+    // just enrolled? the cached copy may be older than the enrolment
+    data = cachedSectionData_(sectionId, true);
+    me = findMe();
   }
   if (!me) throw new Error('You are not enrolled in this class.');
+  ms.data = new Date().getTime() - t0;
 
   var visible = data.assessments.filter(function (a) { return a.published; });
   var stats = bool_(s['SHOW_CLASS_AVERAGE']) ? assessmentStats_(visible, data.roster) : {};
@@ -368,6 +377,13 @@ function studentClass_(session, sectionId) {
   });
 
   var section = data.section;
+  var lap = function (name, fn) { var a = new Date().getTime(); var v = fn(); ms[name] = new Date().getTime() - a; return v; };
+  var survey = lap('survey', function () { return surveyForStudent_(section, session.id); });
+  var materials = lap('materials', function () { return materialsFor_(section.id, true); });
+  var assignments = lap('problemSets', function () { return studentAssignments_(section.id, me, data.assessments); });
+  var exams = lap('exams', function () { return studentExams_(section.id, me.studentId, data.assessments, me.scores); });
+  ms.total = new Date().getTime() - t0;
+  console.log('timing student.class ' + JSON.stringify(ms));
   return {
     section: {
       id: section.id, name: section.name,
@@ -375,11 +391,13 @@ function studentClass_(session, sectionId) {
       units: section.units, semesterName: section.semesterName,
       instructor: section.instructor, schedule: section.schedule, room: section.room
     },
-    survey: surveyForStudent_(section, session.id),
-    materials: materialsFor_(section.id, true),
-    assignments: studentAssignments_(section.id, me, data.assessments),
-    exams: studentExams_(section.id, me.studentId, data.assessments, me.scores),
-    files: courseFilesFor_(section.id, true),
+    survey: survey,
+    materials: materials,
+    assignments: assignments,
+    exams: exams,
+    files: materials.map(function (m) {   // older list kept for app 1.2.0
+      return { kind: m.id, label: m.title, name: m.name, size: m.size, uploaded: m.uploaded };
+    }),
     items: items,
     classSize: data.roster.length,
     grade: bool_(s['SHOW_RUNNING_GRADE']) ? grade : {
