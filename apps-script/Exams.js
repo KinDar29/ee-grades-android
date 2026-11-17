@@ -706,6 +706,7 @@ function studentExams_(sectionId, studentId, assessments, scores) {
     return {
       id: e.id, title: e.title, items: e.items, duration: e.duration,
       opensAt: e.opensAt, closesAt: e.closesAt, state: state, maxExits: e.maxExits,
+      reexamCredit: e.reexam ? e.reexamCredit : null,
       locked: !!(res && str_(res['How']) === 'LOCKED'),
       score: show ? num_(res['Score']) : null,
       scoreItems: res ? num_(res['Items']) : null

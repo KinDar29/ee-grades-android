@@ -1455,6 +1455,14 @@ function assignmentsCard(sectionId, list) {
     }).join('') + '</div><p class="tiny faint" style="margin:8px 6px 0">Upload your answers as one PDF per problem set, up to 10 MB. Scan your work to PDF first. You can replace it until the due time.</p></div></div>';
 }
 
+/** What a student is told about a re-exam's credit. */
+function creditNote(credit) {
+  return credit >= 100
+    ? 'Your score counts in full, and you keep the higher of this score and your original one.'
+    : 'Only ' + credit + '% of your score here counts toward your grade (e.g. 45/50 counts as ' +
+      (Math.round(90 * credit) / 100) + ' of 100). You keep the higher of that and your original score.';
+}
+
 function examsCard(sectionId, list) {
   if (!list || !list.length) return '';
   return '<div class="card"><div class="card-head"><h3>Exams</h3></div><div class="card-body tight"><div class="file-list">' +
@@ -1468,11 +1476,14 @@ function examsCard(sectionId, list) {
           : (e.locked ? '' : '<span class="badge green">✓ Submitted</span>')),
         missed: '<span class="badge red">Closed</span>'
       }[e.state] || '';
-      var btn = e.state === 'open' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '">Start exam</button>'
-        : (e.state === 'in_progress' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '">Continue</button>' : '');
+      var cr = e.reexamCredit ? ' data-credit="' + e.reexamCredit + '"' : '';
+      var btn = e.state === 'open' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '"' + cr + '>Start exam</button>'
+        : (e.state === 'in_progress' ? '<button class="btn sm primary" data-exam="' + esc(e.id) + '" data-max-exits="' + (e.maxExits || 0) + '"' + cr + '>Continue</button>' : '');
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st +
         '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' minutes · open ' + esc(fmtWhen(e.opensAt)) +
-        ' to ' + esc(fmtWhen(e.closesAt)) + '</div></div><div class="file-acts">' + btn + '</div></div>';
+        ' to ' + esc(fmtWhen(e.closesAt)) + '</div>' +
+        (e.reexamCredit ? '<div class="tiny" style="margin-top:3px"><span class="badge gold">Re-exam</span> ' + esc(creditNote(e.reexamCredit)) + '</div>' : '') +
+        '</div><div class="file-acts">' + btn + '</div></div>';
     }).join('') + '</div></div></div>';
 }
 
@@ -1516,8 +1527,8 @@ function bindStudentLms(sectionId) {
   });
   $$('[data-exam]').forEach(function (b) {
     b.addEventListener('click', function () {
-      var id = this.dataset.exam, max = Number(this.dataset.maxExits) || 0;
-      confirmDialog('Start the exam?', 'The timer starts now and keeps running even if you close the page. Answer every question, then press Submit.\n\n' +
+      var id = this.dataset.exam, max = Number(this.dataset.maxExits) || 0, credit = Number(this.dataset.credit) || 0;
+      confirmDialog('Start the exam?', (credit ? 'This is a re-exam. ' + creditNote(credit) + '\n\n' : '') + 'The timer starts now and keeps running even if you close the page. Answer every question, then press Submit.\n\n' +
         'The exam opens in full screen. Stay on this page until you submit: switching apps or tabs, or leaving full screen, is recorded and your teacher sees it.' +
         (max ? ' After ' + max + ' time' + (max === 1 ? '' : 's') + ' the exam locks and your answers are submitted.' : '') +
         ' Copying and pasting are turned off.', 'Start', false)
