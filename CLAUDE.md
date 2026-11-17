@@ -202,7 +202,12 @@ change log at the bottom for every change you ship.
   print blocked, name + ID watermark (`S.profile`). Exam column `Max Exits`
   (0 = never; added by `ensureColumns_`): the server locks on autosave or
   submit once exits ≥ it — result `How` = `LOCKED` with the answers so far;
-  exits only go up. Reset lets the student start over. Web portal only — the Android app doesn't show
+  exits only go up. Reset lets the student start over.
+  **Re-exam** (column choice "Re-exam of a graded column", Exams `Re-exam` =
+  HIGHER): scores go into an already-graded column only when higher than
+  what's there (never lowers; non-takers untouched; blank → re-exam score).
+  The column's scores at creation are kept in `Original Scores` (JSON) so
+  Reset attempt puts the student's original score back. Web portal only — the Android app doesn't show
   assignments or exams yet.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
@@ -443,3 +448,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   8 numeric items re-computed and matched). Written as plain text
   (`setNumberFormat('@')`, so "50%" stays text) by a temporary editor
   function reading a temporary Drive JSON (both removed). Bank: 600 items.
+- **2026-11-17** — Saved in the editor, NOT deployed yet (goes out with v25):
+  re-exam mode for exams (keeps the higher score in an already-graded column
+  such as the Midterm; owner's choice: higher score wins).
