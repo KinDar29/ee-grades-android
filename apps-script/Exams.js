@@ -40,7 +40,7 @@ SCHEMA[EXAMS.BANK_TAB] = ['Subject ID', 'Spreadsheet ID', 'Created At'];
 SCHEMA[EXAMS.TAB] = [
   'Exam ID', 'Section ID', 'Title', 'Assessment ID', 'Bank ID', 'Blueprint', 'Items',
   'Duration Minutes', 'Opens At', 'Closes At', 'Show Score', 'Released',
-  'Pool File ID', 'Created At', 'Created By', 'Max Exits'
+  'Pool File ID', 'Created At', 'Created By', 'Max Exits', 'Re-exam', 'Original Scores'
 ];
 SCHEMA[EXAMS.ATTEMPTS] = ['Attempt ID', 'Exam ID', 'Section ID', 'Student ID', 'Started At', 'Deadline', 'Questions'];
 SCHEMA[EXAMS.RESULTS] = [
@@ -204,7 +204,8 @@ function examOut_(r) {
     showScore: str_(r['Show Score']) === 'IMMEDIATE' ? 'IMMEDIATE' : 'RELEASED',
     released: bool_(r['Released']),
     poolFileId: str_(r['Pool File ID']),
-    maxExits: Math.max(0, Math.round(num_(r['Max Exits']) || 0))
+    maxExits: Math.max(0, Math.round(num_(r['Max Exits']) || 0)),
+    reexam: str_(r['Re-exam']) === 'HIGHER'
   };
 }
 
@@ -285,6 +286,8 @@ function adminExams_(session, sectionId) {
     bank: bank,
     exams: exams,
     columns: emptyColumns_(data),
+    scoredColumns: data.assessments.filter(function (x) { return x.max > 0 && columnHasScores_(data, x.id); })
+      .map(function (x) { return { id: x.id, name: x.name, max: x.max, type: x.type }; }),
     siblings: siblingSections_(sec),
     now: Utilities.formatDate(new Date(), APP.TIMEZONE, 'yyyy-MM-dd HH:mm')
   };
@@ -324,7 +327,8 @@ function createExam_(session, p) {
   if (!items) throw new Error('Choose how many questions to draw from at least one unit and level.');
 
   var col = p.column || { mode: 'new' };
-  var colName = col.mode === 'existing'
+  var reexam = col.mode === 'reexam';
+  var colName = (col.mode === 'existing' || reexam)
     ? (findAssessmentFor_(readSectionData_(sec.id, true), col.assessmentId, '') || {}).name
     : title;
   if (!colName) throw new Error('Choose the gradebook column.');
@@ -339,16 +343,33 @@ function createExam_(session, p) {
   return withLock_(function () {
     var sh = tab_(EXAMS.TAB);
     targets.forEach(function (sid) {
-      var assessmentId = columnFor_(session, sid, {
-        mode: col.mode, assessmentId: sid === sec.id ? col.assessmentId : '', name: colName,
-        type: 'Exam', max: items, weight: num_(col.weight) || 0
-      });
+      var assessmentId, original = '';
+      if (reexam) {
+        // Re-exam: scores go into an already-graded column, but only when higher.
+        // Keep the column's current scores so "Reset attempt" can put them back.
+        var d = readSectionData_(sid, true);
+        var target = findAssessmentFor_(d, sid === sec.id ? col.assessmentId : '', colName);
+        if (!target) throw new Error((getSectionRecord_(sid).name || 'A section') + ' has no column called "' + colName + '". Untick it or add the column first.');
+        assessmentId = target.id;
+        var snap = {};
+        d.roster.forEach(function (s) {
+          var v = s.scores[target.id];
+          if (v !== null && v !== undefined && v !== '' && !isNaN(v)) snap[s.studentId.toLowerCase()] = Number(v);
+        });
+        original = JSON.stringify(snap);
+      } else {
+        assessmentId = columnFor_(session, sid, {
+          mode: col.mode, assessmentId: sid === sec.id ? col.assessmentId : '', name: colName,
+          type: 'Exam', max: items, weight: num_(col.weight) || 0
+        });
+      }
       appendObject_(sh, {
         'Exam ID': uid_('EXM'), 'Section ID': sid, 'Title': title, 'Assessment ID': assessmentId,
         'Bank ID': bankId, 'Blueprint': JSON.stringify(entries), 'Items': items,
         'Duration Minutes': duration, 'Opens At': "'" + opens, 'Closes At': "'" + closes,
         'Show Score': p.showScore === 'IMMEDIATE' ? 'IMMEDIATE' : 'RELEASED', 'Released': 'FALSE',
-        'Pool File ID': poolId, 'Created At': nowStamp_(), 'Created By': session.id, 'Max Exits': maxExits
+        'Pool File ID': poolId, 'Created At': nowStamp_(), 'Created By': session.id, 'Max Exits': maxExits,
+        'Re-exam': reexam ? 'HIGHER' : '', 'Original Scores': original
       });
     });
     logAction_(session.id, session.role, 'EXAM_CREATE', sec.id, { title: title, items: items, sections: targets.join(',') });
@@ -464,7 +485,13 @@ function syncExamScores_(session, exam) {
     var items = num_(r['Items']) || exam.items || 1;
     var value = round_((num_(r['Score']) || 0) / items * (col.max || items), 2);
     var cur = s.scores[col.id];
-    if (cur === null || cur === undefined || cur === '' || Number(cur) !== value) {
+    var blank = cur === null || cur === undefined || cur === '' || isNaN(cur);
+    if (exam.reexam) {
+      // keep the higher score: never lower what the column already has
+      if (blank || Number(cur) < value) changes.push({ studentId: s.studentId, assessmentId: col.id, value: value });
+      return;
+    }
+    if (blank || Number(cur) !== value) {
       changes.push({ studentId: s.studentId, assessmentId: col.id, value: value });
     }
   });
@@ -595,7 +622,15 @@ function resetExamAttempt_(session, sectionId, examId, studentId) {
     });
   });
   if (exam.assessmentId) {
-    saveScores_(session, sectionId, [{ studentId: studentId, assessmentId: exam.assessmentId, value: '' }]);
+    var back = '';
+    if (exam.reexam) {
+      // put the student's original (pre-re-exam) score back
+      var row = findRow_(tab_(EXAMS.TAB), 'Exam ID', exam.id), snap = {};
+      try { snap = JSON.parse(str_(row && row['Original Scores']) || '{}'); } catch (err) { snap = {}; }
+      var k = str_(studentId).toLowerCase();
+      back = snap.hasOwnProperty(k) ? snap[k] : '';
+    }
+    saveScores_(session, sectionId, [{ studentId: studentId, assessmentId: exam.assessmentId, value: back }]);
   }
   logAction_(session.id, session.role, 'EXAM_RESET', sectionId, { id: exam.id, student: studentId });
   return adminExamResults_(session, sectionId, examId);

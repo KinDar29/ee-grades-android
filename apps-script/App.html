@@ -1840,14 +1840,20 @@ function columnPicker(columns, prefix, defaults) {
       '<select id="' + prefix + 'Existing" style="width:auto">' + columns.map(function (c) {
         return '<option value="' + esc(c.id) + '">' + esc(c.name) + ' (max ' + c.max + ')</option>';
       }).join('') + '</select></label>' : '') +
-    '<span class="hint">Columns that already have scores (like a graded exam) are never touched.</span></div>';
+    (defaults.scored && defaults.scored.length ? '<label class="check"><input type="radio" name="' + prefix + 'Col" value="reexam"> Re-exam of a graded column: ' +
+      '<select id="' + prefix + 'Reexam" style="width:auto">' + defaults.scored.map(function (c) {
+        return '<option value="' + esc(c.id) + '">' + esc(c.name) + ' (max ' + c.max + ')</option>';
+      }).join('') + '</select></label>' +
+      '<span class="hint" style="margin-left:24px">A student’s score replaces the one in that column only if it is higher. Students who don’t take it keep their score.</span>' : '') +
+    '<span class="hint">Columns that already have scores (like a graded exam) are never touched' + (defaults.scored ? ', except by a re-exam, which only raises them' : '') + '.</span></div>';
 }
 
 function readColumn(body, prefix) {
   var mode = ($('input[name="' + prefix + 'Col"]:checked', body) || {}).value || 'new';
   return {
     mode: mode,
-    assessmentId: mode === 'existing' ? $('#' + prefix + 'Existing', body).value : '',
+    assessmentId: mode === 'existing' ? $('#' + prefix + 'Existing', body).value
+      : (mode === 'reexam' ? $('#' + prefix + 'Reexam', body).value : ''),
     max: $('#' + prefix + 'Max', body) ? Number($('#' + prefix + 'Max', body).value) : undefined,
     weight: Number($('#' + prefix + 'Weight', body).value) || 0
   };
@@ -2093,7 +2099,7 @@ function manageExams(section) {
         '<div class="field"><label>Closes</label><input type="datetime-local" id="xClose"></div></div>' +
         '<label class="check"><input type="checkbox" id="xShow"> Show students their score right after submitting <span class="faint">(otherwise hidden until you release it)</span></label>' +
         exitsField('xExits', 3) +
-        columnPicker(data.columns, 'x', { max: false }) + siblingChecks(data.siblings) +
+        columnPicker(data.columns, 'x', { max: false, scored: data.scoredColumns || [] }) + siblingChecks(data.siblings) +
         '<div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn primary" id="xCreate">Create exam</button></div></div></details>';
     }
 
@@ -2101,7 +2107,7 @@ function manageExams(section) {
       var st = { upcoming: '<span class="badge grey">Upcoming</span>', open: '<span class="badge green">Open now</span>', closed: '<span class="badge">Closed</span>' }[e.state];
       return '<div class="file-row"><div class="file-txt"><b>' + esc(e.title) + '</b> ' + st + ' ' +
         (e.showScore === 'IMMEDIATE' ? '<span class="badge">score shown at once</span>' : (e.released ? '<span class="badge green">released</span>' : '<span class="badge gold">not released</span>')) +
-        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · column “' + esc(e.columnName) + '”' +
+        '<div class="tiny muted">' + e.items + ' questions · ' + e.duration + ' min · ' + esc(fmtWhen(e.opensAt)) + ' → ' + esc(fmtWhen(e.closesAt)) + ' · ' + (e.reexam ? 're-exam of' : 'column') + ' “' + esc(e.columnName) + '”' + (e.reexam ? ' (keeps the higher score)' : '') +
         ' · ' + (e.maxExits ? 'locks after ' + e.maxExits + ' exit' + (e.maxExits === 1 ? '' : 's') : 'never locks') + '</div>' +
         '<div class="small" style="margin-top:3px">' + e.counts.submitted + ' / ' + e.counts.students + ' submitted · ' + (e.counts.started - e.counts.submitted) + ' in progress</div></div>' +
         '<div class="file-acts"><button class="btn sm primary" data-res="' + esc(e.id) + '">Results</button>' +
