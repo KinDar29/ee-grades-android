@@ -3180,7 +3180,7 @@ function cadsPieces(m, tx) {
   };
   recChunks.forEach(function (chunk, ci) {
     add((ci ? '' : '<div class="h2">B.&nbsp; <u>Course Outcome Assessment Class Record</u></div>') +
-      '<table class="rec"><colgroup><col style="width:18px"><col style="width:190px">' + dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:30px">'); }).join('') +
+      '<table class="rec split" data-head="' + (recHead.match(/<tr/g) || []).length + '"><colgroup><col style="width:18px"><col style="width:190px">' + dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:30px">'); }).join('') +
       '<col style="width:34px"><col style="width:32px"><col style="width:34px"><col style="width:34px"><col style="width:66px"></colgroup>' + recHead + chunk.map(function (s, i) {
         var f = s.final || {};
         return '<tr><td class="c">' + (ci * REC + i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
@@ -3190,10 +3190,7 @@ function cadsPieces(m, tx) {
           '<td class="c">' + cadsN(f.average) + '</td><td class="c b">' + (f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
           '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:9px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
       }).join('') + '</table>' +
-      (ci === recChunks.length - 1 ? '<div class="note">Blank = no score recorded yet. ' +
-        'Final average = ' + esc(m.lecShare) + ' lecture (Total %CO Attainment) + ' + esc(m.labShare) + ' laboratory, graded on the workbook’s transmutation table' +
-        '. A lecture or laboratory average below 50% gives that failing grade whatever the other is. INC = incomplete, DRP = dropped' +
-        (m.waitingLab ? '; ' + m.waitingLab + ' student(s) have no final grade yet' : '') + '.</div>' : ''), true, 18 + 190 + dcos.reduce(function (a, d) { return a + 30 * (d.tasks.length + 1); }, 0) + 34 + 32 + 34 + 34 + 66);
+      '', true, 18 + 190 + dcos.reduce(function (a, d) { return a + 30 * (d.tasks.length + 1); }, 0) + 34 + 32 + 34 + 34 + 66);
   });
   var sumTable = function (s) {
     return '<table><tr class="g"><td style="width:40%"></td>' + m.CO.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '<th>All COs</th></tr>' +
@@ -3222,17 +3219,16 @@ function cadsPieces(m, tx) {
   var formRows = [];
   m.CO.forEach(function (k) {
     var co = c.cos.filter(function (x) { return x.co === k; })[0];
-    formRows.push('<tr style="background:' + CADS.BAND + '"><td colspan="' + (scale.length + 1) + '" class="b">' + esc(k + '. ' + co.text) + '</td></tr>');
+    formRows.push('<tr class="grp" style="background:' + CADS.BAND + '"><td colspan="' + (scale.length + 1) + '" class="b">' + esc(k + '. ' + co.text) + '</td></tr>');
     c.statements.filter(function (s) { return s.co === k; }).forEach(function (s) {
       formRows.push('<tr><td>' + esc(s.text) + '</td>' + scale.map(function () { return '<td></td>'; }).join('') + '</tr>');
     });
   });
   var formHead = '<tr class="g"><th>Assessment Criteria</th>' + scale.map(function (x) { return '<th style="width:9%">' + esc(x.label) + '<br>' + x.n + '</th>'; }).join('') + '</tr>';
-  rowsOf(formRows, 16).forEach(function (chunk, ci) {
-    add((ci ? '' : '<div class="h1"><span>III.</span><u>INDIRECT ASSESSMENT</u></div><div class="h2">A.&nbsp; <u>Indirect Assessment Form</u></div>' +
-      '<p class="body">Based on your experience taking this course, activities both synchronous and asynchronous, at what level would you RATE yourself now on the following?</p>') +
-      '<table>' + formHead + chunk.join('') + '</table>', ci === 0);
-  });
+  // one table; buildCadsPdf splits it across pages at full size, repeating the heading row
+  add('<div class="h1"><span>III.</span><u>INDIRECT ASSESSMENT</u></div><div class="h2">A.&nbsp; <u>Indirect Assessment Form</u></div>' +
+    '<p class="body">Based on your experience taking this course, activities both synchronous and asynchronous, at what level would you RATE yourself now on the following?</p>' +
+    '<table class="split" data-head="1">' + formHead + formRows.join('') + '</table>', true);
 
   // III.B result
   var resHead = banner('Indirect Assessment', 2 + m.CO.length * 2 + 1) +
@@ -3281,14 +3277,53 @@ function cadsPieces(m, tx) {
 }
 
 /** Builds the PDF bytes for admin.cads data. */
+/** Pieces taller than a page whose table is marked .split (data-head = heading rows)
+ *  are cut into page-sized pieces, each repeating the heading rows, so every
+ *  part prints at the same full size instead of being shrunk to fit. */
+function cadsSplitPieces(box) {
+  var cw = CADS.PAGE_W - 2 * CADS.MARGIN, room = CADS.PAGE_H - CADS.TOP - CADS.BOTTOM;
+  var queue = $$('.pc', box);
+  while (queue.length) {
+    var el = queue.shift(), t = el.querySelector('table.split');
+    var maxPx = room * el.offsetWidth / cw - 2;
+    if (!t || el.offsetHeight <= maxPx) continue;
+    var head = +t.dataset.head || 0, body = [].slice.call(t.rows, head);
+    if (body.length < 2) continue;
+    var next = el.cloneNode(false);
+    next.removeAttribute('data-brk');
+    var t2 = t.cloneNode(false), tb = document.createElement('tbody');
+    [].slice.call(t.querySelectorAll('colgroup')).forEach(function (cg) { t2.appendChild(cg.cloneNode(true)); });
+    [].slice.call(t.rows, 0, head).forEach(function (row) { tb.appendChild(row.cloneNode(true)); });
+    t2.appendChild(tb); next.appendChild(t2);
+    el.parentNode.insertBefore(next, el.nextSibling);
+    var moved = 0;
+    // move rows from the end until this piece fits (keep at least one body row)
+    while (el.offsetHeight > maxPx && moved < body.length - 1) {
+      var row = body[body.length - 1 - moved];
+      tb.insertBefore(row, tb.rows[head] || null);
+      moved++;
+    }
+    // never leave a group heading (CO row) alone at the bottom of a part
+    while (moved < body.length - 1 && /\bgrp\b/.test(body[body.length - 1 - moved].className)) {
+      tb.insertBefore(body[body.length - 1 - moved], tb.rows[head] || null);
+      moved++;
+    }
+    // anything after the table (a note) goes with the last part
+    var after = t.nextSibling;
+    while (after) { var nx = after.nextSibling; next.appendChild(after); after = nx; }
+    queue.unshift(next);
+  }
+}
+
 function buildCadsPdf(r) {
   var m = cadsModel(r), tx = cadsTexts(m), pieces = cadsPieces(m, tx);
   var box = document.createElement('div');
   box.className = 'cads';
   box.innerHTML = '<style>' + CADS_CSS + '</style>' + pieces.map(function (p, i) {
-    return '<div class="pc" data-i="' + i + '"' + (p.width ? ' style="width:' + p.width + 'px"' : '') + '>' + p.html + '</div>';
+    return '<div class="pc"' + (p.brk ? ' data-brk="1"' : '') + (p.width ? ' style="width:' + p.width + 'px"' : '') + '>' + p.html + '</div>';
   }).join('');
   document.body.appendChild(box);
+  cadsSplitPieces(box);
   var libs;
   return Promise.all([loadScriptOnce(PDF_LIBS.pdfLib, 'PDFLib'), loadScriptOnce(PDF_LIBS.htmlToImage, 'htmlToImage')]).then(function (l) {
     libs = { pdf: l[0], img: l[1] };
@@ -3302,7 +3337,7 @@ function buildCadsPdf(r) {
             x: b.left - base.left, y: b.top - base.top, w: b.width, h: b.height };
         });
         return libs.img.toPng(el, { pixelRatio: 2.2, backgroundColor: '#ffffff', skipFonts: true, cacheBust: false })
-          .then(function (png) { shots.push({ png: png, w: el.offsetWidth, h: el.offsetHeight, brk: pieces[i].brk, fields: fields }); });
+          .then(function (png) { shots.push({ png: png, w: el.offsetWidth, h: el.offsetHeight, brk: !!el.dataset.brk, fields: fields }); });
       });
     });
     return chain.then(function () { return shots; });
