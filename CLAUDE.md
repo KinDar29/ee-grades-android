@@ -574,3 +574,8 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   (24-050329, BSEE 2A) lab final average 0 → **60** in the lab table (M69),
   owner's request (final grade must be 3.00): lecture 53.63, final average 55
   → 3.00 PASSED. G70 had been typed over with 70; its lookup formula is back.
+- **2026-11-18 10:52** — (not deployed yet) Course Assessment Data Sheet:
+  Final Grade (1.00–5.00) in the Final Grade table is now a fillable PDF field
+  (centred, like Remarks). Sugui's lab average checked from the editor with a
+  temporary read-only function (removed): the server reads 60 / 3.00 PASSED —
+  the 0 the owner saw was a data sheet loaded before the 10:15 change.

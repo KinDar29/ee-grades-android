@@ -3223,7 +3223,7 @@ function cadsPieces(m, tx) {
       var lec = f.lectureAverage !== null && f.lectureAverage !== undefined ? f.lectureAverage : s.total;
       return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td><td class="c">' + cadsN(lec) + '</td>' +
         '<td class="c">' + orText(f.labAverage, f.labText) + '</td>' +
-        '<td class="c">' + cadsN(f.average) + '</td><td class="c b">' + (f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
+        '<td class="c">' + cadsN(f.average) + '</td><td class="fld hide c" data-field="grade_' + esc(s.id || s.name) + '" data-single="1" style="font-size:11px;vertical-align:middle">' + esc(f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
         '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:11px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
     }).join('') + '</table>', true);
   var sumTable = function (s) {
