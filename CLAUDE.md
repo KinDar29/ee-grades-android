@@ -533,7 +533,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   worse one if both) — the other component can't lift it. Lab "INC" /
   "DROPPED" text gives INC / DROPPED (remark INCOMPLETE / DROPPED). Columns
   I:J (rows 9–208); Final average (H) is still shown as 80/20.
-- **2026-11-18** — (not deployed yet; branch `cads-letterhead`) Course
+- **2026-11-18 08:55** — Portal deployment version 32: Course
   Assessment Data Sheet on the COE 50th-anniversary letterhead (A4), gray
   tables and charts, Lab Grade column in the class record, aligned tables
   (course info full width, grading system and time stacked, time as one
