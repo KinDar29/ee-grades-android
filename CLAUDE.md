@@ -570,3 +570,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-18 09:58** — Data only: Avanzado (24-050384) marked **Dropped** in
   BSEE 2B's Final Status tab (owner: dropped in lecture, so dropped in lab too;
   matches the workbook). Tariga (24-050234) was already Dropped there.
+- **2026-11-18 10:15** — Data only: EE121 workbook Final Grade, Sugui
+  (24-050329, BSEE 2A) lab final average 0 → **60** in the lab table (M69),
+  owner's request (final grade must be 3.00): lecture 53.63, final average 55
+  → 3.00 PASSED. G70 had been typed over with 70; its lookup formula is back.
