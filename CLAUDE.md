@@ -106,8 +106,12 @@ change log at the bottom for every change you ship.
   signatories (instructor from Setup; Chair/Dean = Settings
   `SUMMARY_CHAIR_NAME` / `SUMMARY_DEAN_NAME`, defaults Rigor G. Gabur / Sharona
   Q. Barroga) and the College header/footer images (`CADS_ASSETS`, taken from
-  the Program Assessment Data Sheet template). The browser (`buildCadsPdf` in
-  App.html) builds 8.5×13 in pages in the template's order — I Course
+  the Program Assessment Data Sheet template; since 2026-11-18 `CADS_ASSETS.page`
+  = the COE 50th-anniversary letterhead rendered as one A4 page at 200 dpi,
+  drawn behind every page). The browser (`buildCadsPdf` in
+  App.html) builds A4 pages (content kept inside 1-in sides, `CADS.TOP` 140 pt
+  below the logos and `CADS.BOTTOM` 138 pt above the letterhead artwork; gray
+  only — light gray headings, darker gray highlights) in the template's order — I Course
   information, II Direct (plan, class record, attainment, chart + comments),
   III Indirect (form, results, chart + comments), IV Comparison (+ analysis),
   V Actions for CQI, Prepared by / Noted by — pieces captured with
@@ -115,7 +119,9 @@ change log at the bottom for every change you ship.
   from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
-  Class record also has Final Average (Setup's lecture/lab shares, 80/20),
+  Class record (fixed column widths, ≤ 36 students per page) also has Lab
+  Grade (%) (workbook Final Grade "Lab final average"; INC / DRP when the cell
+  is text), Final Average (Setup's lecture/lab shares, 80/20),
   Final Grade (1.00–5.00) — both from the workbook's **Final Grade** tab, blank
   until the lab instructor's averages are pasted there — and Remarks (single-
   line PDF fields): INCOMPLETE / DROPPED from the class sheet's Final Status
@@ -527,3 +533,10 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   worse one if both) — the other component can't lift it. Lab "INC" /
   "DROPPED" text gives INC / DROPPED (remark INCOMPLETE / DROPPED). Columns
   I:J (rows 9–208); Final average (H) is still shown as 80/20.
+- **2026-11-18 08:55** — Portal deployment version 32: Course
+  Assessment Data Sheet on the COE 50th-anniversary letterhead (A4), gray
+  tables and charts, Lab Grade column in the class record, aligned tables
+  (course info full width, grading system and time stacked, time as one
+  row per Unit / CO / Hours), every piece inside the margins. Checked by
+  running the real `buildCadsPdf` in Chromium on sample data
+  (`/opt/npm-tools` pdf-lib + html-to-image).
