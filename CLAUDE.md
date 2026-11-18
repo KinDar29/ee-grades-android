@@ -567,3 +567,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   outside. `CADS_CSS` now resets those inside `.cads`; Final Grade names stay
   on one line. The test harness now loads `Styles.html` in dark mode so the
   sample matches what the portal produces.
+- **2026-11-18 09:58** — Data only: Avanzado (24-050384) marked **Dropped** in
+  BSEE 2B's Final Status tab (owner: dropped in lecture, so dropped in lab too;
+  matches the workbook). Tariga (24-050234) was already Dropped there.
