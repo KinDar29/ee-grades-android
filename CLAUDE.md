@@ -601,3 +601,10 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   15:104). Comparison now: direct 47.78 / 21.35 / 96.63 / 51.11, indirect
   93.1 / 80.46 / 72.41 / 88.51. Add rows the same way if more students
   join (Class Record and Final Grade already go further).
+- **2026-11-18 11:58** — (saved in the editor, not deployed yet) Summary of
+  Grades counts classes that have a department-template assessment workbook
+  from its **Final Grade** tab (lecture + laboratory, lab INC / DRP rules) —
+  `finalGradesFromWorkbook_`; portal INC / Dropped still win. Rebuilt with
+  `makeSummaryOfGrades()` from the editor: EE121 BSECE 33 = 23 passed / 6
+  conditional / 4 failed; BSEE (2A + 2B) 57 = 22 passed / 25 conditional /
+  6 failed / 1 INC / 3 dropped — checked against the workbook by hand.
