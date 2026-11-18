@@ -574,3 +574,19 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   (24-050329, BSEE 2A) lab final average 0 → **60** in the lab table (M69),
   owner's request (final grade must be 3.00): lecture 53.63, final average 55
   → 3.00 PASSED. G70 had been typed over with 70; its lookup formula is back.
+- **2026-11-18 10:55** — Portal deployment version 36: Course Assessment Data Sheet:
+  Final Grade (1.00–5.00) in the Final Grade table is now a fillable PDF field
+  (centred, like Remarks). Sugui's lab average checked from the editor with a
+  temporary read-only function (removed): the server reads 60 / 3.00 PASSED —
+  the 0 the owner saw was a data sheet loaded before the 10:15 change.
+- **2026-11-18 11:00** — Data only: EE121 workbook Final Grade — lab "INC"
+  for Calizo, Fernandez (Jeremi Kale, 2A), Gamit, Sugui, Viernes, Villanueva
+  (lab table M48, M57, M58, M69, M73, M74). Owner's rule, columns I:J rows
+  9–208: lab INC → final grade INC (remark INCOMPLETE) when the lecture
+  (rounded) is passing, else the lecture's 4.00 / 5.00 (CONDITIONAL /
+  FAILED); lab DROPPED → final grade **DRP** (remark DROPPED). Result:
+  Calizo, Sugui INC; Fernandez 4.00; Gamit, Viernes, Villanueva 5.00;
+  Avanzado DRP. (version 36) App.html reads "DRP" as dropped.
+- **2026-11-18 10:58** — Data only: Gamit (24-050246, 2A) dropped in lecture
+  (already Dropped in the portal's Final Status) → lab M58 "DROPPED", final
+  grade DRP, remark DROPPED (was 5.00 FAILED).

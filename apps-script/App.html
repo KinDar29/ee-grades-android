@@ -3024,7 +3024,7 @@ function cadsRemark(s) {
   if (s.status === 'Dropped') return 'DROPPED';
   var gt = String(s.final && s.final.gradeText || '').toUpperCase();
   if (/^INC/.test(gt)) return 'INCOMPLETE';
-  if (/DROP/.test(gt)) return 'DROPPED';
+  if (/DROP|^DRP/.test(gt)) return 'DROPPED';
   var g = s.final ? s.final.grade : null;
   if (g === null || g === undefined) return '';
   return g <= 3 ? 'PASSED' : (g < 5 ? 'CONDITIONAL' : 'FAILED');
@@ -3172,7 +3172,7 @@ function cadsPieces(m, tx) {
   var orText = function (v, t) {   // number, or the workbook's text shortened to fit (INC / DRP)
     if (v !== null && v !== undefined && !isNaN(v)) return cadsN(v);
     t = String(t || '').toUpperCase();
-    return /^INC/.test(t) ? 'INC' : (/DROP/.test(t) ? 'DRP' : '');
+    return /^INC/.test(t) ? 'INC' : (/DROP|^DRP/.test(t) ? 'DRP' : '');
   };
   var headRows = function (h) { return (h.match(/<tr/g) || []).length; };
 
@@ -3223,7 +3223,7 @@ function cadsPieces(m, tx) {
       var lec = f.lectureAverage !== null && f.lectureAverage !== undefined ? f.lectureAverage : s.total;
       return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td><td class="c">' + cadsN(lec) + '</td>' +
         '<td class="c">' + orText(f.labAverage, f.labText) + '</td>' +
-        '<td class="c">' + cadsN(f.average) + '</td><td class="c b">' + (f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
+        '<td class="c">' + cadsN(f.average) + '</td><td class="fld hide c" data-field="grade_' + esc(s.id || s.name) + '" data-single="1" style="font-size:11px;vertical-align:middle">' + esc(f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
         '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:11px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';
     }).join('') + '</table>', true);
   var sumTable = function (s) {
