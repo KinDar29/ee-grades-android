@@ -590,3 +590,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-18 10:58** — Data only: Gamit (24-050246, 2A) dropped in lecture
   (already Dropped in the portal's Final Status) → lab M58 "DROPPED", final
   grade DRP, remark DROPPED (was 5.00 FAILED).
+- **2026-11-18 11:04** — Data only: Sugui (24-050329) is NOT lab INC (owner's
+  correction) — lab M69 back to **60**, final average 55 → 3.00 PASSED.
+  Lab INC now: Calizo, Fernandez (Jeremi Kale), Viernes, Villanueva.
