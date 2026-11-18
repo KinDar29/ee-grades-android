@@ -540,7 +540,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   row per Unit / CO / Hours), every piece inside the margins. Checked by
   running the real `buildCadsPdf` in Chromium on sample data
   (`/opt/npm-tools` pdf-lib + html-to-image).
-- **2026-11-18 09:05** — (not deployed yet) Course Assessment Data Sheet:
+- **2026-11-18 09:07** — Portal deployment version 33: Course Assessment Data Sheet:
   the explanatory note under the class record removed (owner's request). The
   Indirect Assessment Form is one table that `cadsSplitPieces` cuts into
   page-sized parts (heading row repeated, a CO row never left alone at the
