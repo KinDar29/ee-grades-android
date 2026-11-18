@@ -579,3 +579,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   (centred, like Remarks). Sugui's lab average checked from the editor with a
   temporary read-only function (removed): the server reads 60 / 3.00 PASSED —
   the 0 the owner saw was a data sheet loaded before the 10:15 change.
+- **2026-11-18 11:00** — Data only: EE121 workbook Final Grade — lab "INC"
+  for Calizo, Fernandez (Jeremi Kale, 2A), Gamit, Sugui, Viernes, Villanueva
+  (lab table M48, M57, M58, M69, M73, M74). Owner's rule, columns I:J rows
+  9–208: lab INC → final grade INC (remark INCOMPLETE) when the lecture
+  (rounded) is passing, else the lecture's 4.00 / 5.00 (CONDITIONAL /
+  FAILED); lab DROPPED → final grade **DRP** (remark DROPPED). Result:
+  Calizo, Sugui INC; Fernandez 4.00; Gamit, Viernes, Villanueva 5.00;
+  Avanzado DRP. (not deployed yet) App.html reads "DRP" as dropped.
