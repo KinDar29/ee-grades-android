@@ -6,6 +6,8 @@
  *  The workbook's first tabs follow the department's template:
  *    Setup                    course info, target, COs, grading system
  *    Course Assessment Plan   tasks per CO (I/E/D, C/P/A, %), unit hours
+ *    Class Record             one row per student: every task (ME, FE1-2, UE1-8,
+ *                             PS1-3) as a %, each component's %, SEM GRADE
  *    Direct Assessment        one row per student: task scores + %CO per CO
  *    Indirect Assessment      one row per student: rating + %CO per CO
  *    Final Grade              student name, number and section
@@ -22,7 +24,7 @@ var COURSE_WB = {
   CACHE_SECONDS: 300,
   TABS: {
     SETUP: 'Setup', PLAN: 'Course Assessment Plan', DIRECT: 'Direct Assessment',
-    INDIRECT: 'Indirect Assessment', FINAL: 'Final Grade', ITEMS: 'Survey Items'
+    INDIRECT: 'Indirect Assessment', FINAL: 'Final Grade', ITEMS: 'Survey Items', RECORD: 'Class Record'
   },
   DEFAULT_CHAIR: 'Rigor G. Gabur',
   DEFAULT_DEAN: 'Sharona Q. Barroga'
@@ -56,7 +58,7 @@ function readCourseWorkbook_(ss) {
   var T = COURSE_WB.TABS;
   var out = {
     title: ss.getName(), url: ss.getUrl(), info: {}, target: 70, finalShares: null, cos: [], components: [], ied: {},
-    units: [], plan: [], direct: { cos: [], students: [] }, indirect: { students: [] },
+    units: [], plan: [], direct: { cos: [], students: [] }, indirect: { students: [] }, record: null,
     statements: [], scale: [], updated: nowStamp_()
   };
 
@@ -176,6 +178,17 @@ function readCourseWorkbook_(ss) {
     out.direct.students.push(st);
   }
 
+  // ---- Class Record (task scores per component; optional tab)
+  var rec = readClassRecordTab_(cwValues_(ss, T.RECORD));
+  if (rec) {
+    out.record = { groups: rec.groups, cols: rec.cols };
+    out.direct.students.forEach(function (st) {
+      var r = (st.id && rec.byId[str_(st.id).toLowerCase()]) || rec.byName[studentKey_(st.name)];
+      st.record = r ? r.values : null;
+      st.semGrade = r ? r.sem : null;
+    });
+  }
+
   // ---- Indirect Assessment
   var iv = cwValues_(ss, T.INDIRECT);
   var ih = rowWhere_(iv, function (r) { return str_(r[1]) === 'CO' && /^CO\d+$/i.test(str_(r[2])); });
@@ -218,6 +231,48 @@ function readCourseWorkbook_(ss) {
 }
 
 /** Cached copy of readCourseWorkbook_ for one workbook. */
+/**
+ * The workbook's "Class Record" tab: component row (ME - 15%, … merged), then
+ * "Assessment Task" (CO + weight per task), "%AT" (labels: ME, %, %ME, FE1,
+ * %FE1, …), "Student" (max scores) and one row per student. Each task is
+ * reported as its % column; a "%XX" column that doesn't follow a task is the
+ * component total. Also SEM GRADE, Student No. and Section by header.
+ */
+function readClassRecordTab_(cv) {
+  if (!cv || !cv.length) return null;
+  var taskRow = rowWhere_(cv, function (r) { return str_(r[1]) === 'Assessment Task'; });
+  var labRow = rowWhere_(cv, function (r) { return str_(r[1]) === '%AT'; });
+  var maxRow = rowWhere_(cv, function (r) { return str_(r[1]) === 'Student'; });
+  if (taskRow < 0 || labRow < 0 || maxRow < 0) return null;
+  var head = cv[taskRow].map(function (x) { return str_(x); });
+  var semCol = head.indexOf('SEM GRADE'), idCol = head.indexOf('Student No.');
+  var cols = [], group = '', groups = [];
+  var width = cv[labRow].length;
+  for (var j = 2; j < width; j++) {
+    var g = cwCell_(cv, taskRow - 1, j);
+    if (g) { group = g; groups.push({ label: g, span: 0 }); }
+    var lab = cwCell_(cv, labRow, j);
+    if (!lab) continue;
+    if (lab.charAt(0) !== '%') {
+      var pc = /^%/.test(cwCell_(cv, labRow, j + 1)) ? j + 1 : j;
+      cols.push({ label: lab, group: group, co: cwCell_(cv, taskRow, j), weight: cwCell_(cv, taskRow, j + 1), kind: 'task', col: pc });
+      j = pc;
+    } else {
+      cols.push({ label: lab, group: group, co: '', weight: '', kind: 'total', col: j });
+    }
+    if (groups.length) groups[groups.length - 1].span++;
+  }
+  var byId = {}, byName = {};
+  for (var r = maxRow + 1; r < cv.length && cwCell_(cv, r, 1); r++) {
+    var item = { values: cols.map(function (c) { return cwNum_(cv[r][c.col]); }), sem: semCol >= 0 ? cwNum_(cv[r][semCol]) : null };
+    byName[studentKey_(cwCell_(cv, r, 1))] = item;
+    if (idCol >= 0 && cwCell_(cv, r, idCol)) byId[cwCell_(cv, r, idCol).toLowerCase()] = item;
+  }
+  return { groups: groups.filter(function (x) { return x.span; }),
+    cols: cols.map(function (c) { return { label: c.label, group: c.group, co: c.co, weight: c.weight, kind: c.kind }; }),
+    byId: byId, byName: byName };
+}
+
 function courseWorkbook_(workbookId, fresh) {
   var cache = CacheService.getScriptCache(), key = 'course:' + workbookId;
   if (!fresh) {

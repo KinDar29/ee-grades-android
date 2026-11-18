@@ -119,7 +119,14 @@ change log at the bottom for every change you ship.
   from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
-  Class record (fixed column widths, ≤ 36 students per page, no note under it) also has Lab
+  Section II: **B. Course Assessment Record** (upper row = CO: task scores,
+  %CO, Total %CO and Semestral Grade (%) — no 1.00–5.00 grades or remarks,
+  owner's rule; from the Direct Assessment tab), **C. Class Record** (upper
+  row = assessment task ME / FE / UE / PS: the workbook's "Class Record" tab
+  via `readClassRecordTab_` — each task as its %, component totals, SEM GRADE;
+  `course.record`, `student.record` / `semGrade`) followed by the **Final
+  Grade** table (lecture average, lab average, final average, final grade, Remarks as
+  centred single-line fields), **D. Analysis and Graphs**. Older note: class record (fixed column widths, no note under it) also has Lab
   Grade (%) (workbook Final Grade "Lab final average"; INC / DRP when the cell
   is text), Final Average (Setup's lecture/lab shares, 80/20),
   Final Grade (1.00–5.00) — both from the workbook's **Final Grade** tab, blank
@@ -546,3 +553,10 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   page-sized parts (heading row repeated, a CO row never left alone at the
   bottom), so every part prints at the same full size; any `table.split`
   (form, class record) is handled the same way.
+- **2026-11-18 09:35** — Portal deployment version 34: Course Assessment Data Sheet II:
+  B. Course Assessment Record (CO on top) and C. Class Record (ME / FE / UE /
+  PS on top, from the workbook's "Class Record" tab) as separate sections,
+  Final Grade table after the class record, Analysis renumbered D; Remarks
+  centred in their cells. Course Assessment Record ends at Total %CO +
+  Semestral Grade (%); numerical grades and remarks only in the Class Record
+  part (its Final Grade table).
