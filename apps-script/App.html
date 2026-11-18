@@ -3171,9 +3171,24 @@ function cadsPieces(m, tx) {
   };
   var headRows = function (h) { return (h.match(/<tr/g) || []).length; };
 
-  // B.1 Class record: the workbook's "Class Record" tab (each task as a %, each component's %, semestral grade)
-  var R = c.record, firstB = true;
-  var bHead = function () { var h = firstB ? '<div class="h2">B.&nbsp; <u>Course Outcome Assessment Class Record</u></div>' : ''; firstB = false; return h; };
+  // B. Course assessment record: task scores and %CO per student (upper row = CO)
+  var daCols = 2 + dcos.reduce(function (a, d) { return a + d.tasks.length + 1; }, 0) + 1;
+  var daHead = banner('Course Assessment Record', daCols) +
+    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attain&shy;ment</th></tr>' +
+    '<tr class="g"><th>%CO</th>' + dcos.map(function (d) { return '<td class="c" colspan="' + (d.tasks.length + 1) + '">' + esc(d.weight) + '</td>'; }).join('') + '</tr>' +
+    '<tr class="g"><th>ASSESSMENT TASK</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<th>' + esc(t.task) + '</th>'; }).join('') + '<th class="y">%' + esc(d.co) + '</th>'; }).join('') + '</tr>' +
+    '<tr class="g at"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(cadsPctText(t.weight)) + '</td>'; }).join('') + '<td class="c y">' + esc(cadsPctText(d.pctWeight)) + '</td>'; }).join('') + '</tr>' +
+    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td></tr>';
+  add('<div class="h2">B.&nbsp; <u>Course Assessment Record</u></div><table class="rec split" data-head="' + headRows(daHead) + '"><colgroup><col style="width:18px"><col style="width:190px">' +
+    dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:34px">'); }).join('') + '<col style="width:52px"></colgroup>' + daHead +
+    m.students.map(function (s, i) {
+      return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
+        return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsN(v) + '</td>'; }).join('') + '<td class="c y">' + cadsN(s.co[d.co]) + '</td>';
+      }).join('') + '<td class="c y b">' + cadsN(s.total) + '</td></tr>';
+    }).join('') + '</table>', true, 18 + 190 + dcos.reduce(function (a, d) { return a + 34 * (d.tasks.length + 1); }, 0) + 52);
+
+  // C. Class record: the workbook's "Class Record" tab (upper row = assessment task ME / FE / UE / PS) (each task as a %, each component's %, semestral grade)
+  var R = c.record;
   if (R && R.cols.length) {
     var rn = R.cols.length, crCols = 2 + rn + 1;
     var crHead = banner('Class Record', crCols) +
@@ -3182,7 +3197,7 @@ function cadsPieces(m, tx) {
       '<tr class="g at">' + R.cols.map(function (x) { return '<td class="c' + (x.kind === 'total' ? ' y' : '') + '">' + esc(x.co) + '</td>'; }).join('') + '</tr>' +
       '<tr class="g at">' + R.cols.map(function (x) { return '<td class="c' + (x.kind === 'total' ? ' y' : '') + '">' + esc(cadsPctText(x.weight)) + '</td>'; }).join('') + '</tr>' +
       '<tr class="g">' + R.cols.map(function (x) { return '<th' + (x.kind === 'total' ? ' class="y"' : '') + '>' + esc(x.label) + '</th>'; }).join('') + '</tr>';
-    add(bHead() + '<table class="rec split" data-head="' + headRows(crHead) + '"><colgroup><col style="width:18px"><col style="width:190px">' +
+    add('<div class="h2">C.&nbsp; <u>Class Record</u></div><table class="rec split" data-head="' + headRows(crHead) + '"><colgroup><col style="width:18px"><col style="width:190px">' +
       new Array(rn + 1).join('<col style="width:31px">') + '<col style="width:44px"></colgroup>' + crHead +
       m.students.map(function (s, i) {
         return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td>' + R.cols.map(function (x, k) {
@@ -3192,23 +3207,7 @@ function cadsPieces(m, tx) {
       }).join('') + '</table>', true, 18 + 190 + 31 * rn + 44);
   }
 
-  // B.2 Direct assessment: task scores and %CO per student
-  var daCols = 2 + dcos.reduce(function (a, d) { return a + d.tasks.length + 1; }, 0) + 1;
-  var daHead = banner('Direct Assessment', daCols) +
-    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attain&shy;ment</th></tr>' +
-    '<tr class="g"><th>%CO</th>' + dcos.map(function (d) { return '<td class="c" colspan="' + (d.tasks.length + 1) + '">' + esc(d.weight) + '</td>'; }).join('') + '</tr>' +
-    '<tr class="g"><th>ASSESSMENT TASK</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<th>' + esc(t.task) + '</th>'; }).join('') + '<th class="y">%' + esc(d.co) + '</th>'; }).join('') + '</tr>' +
-    '<tr class="g at"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(cadsPctText(t.weight)) + '</td>'; }).join('') + '<td class="c y">' + esc(cadsPctText(d.pctWeight)) + '</td>'; }).join('') + '</tr>' +
-    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td></tr>';
-  add(bHead() + '<table class="rec split" data-head="' + headRows(daHead) + '"><colgroup><col style="width:18px"><col style="width:190px">' +
-    dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:34px">'); }).join('') + '<col style="width:52px"></colgroup>' + daHead +
-    m.students.map(function (s, i) {
-      return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
-        return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsN(v) + '</td>'; }).join('') + '<td class="c y">' + cadsN(s.co[d.co]) + '</td>';
-      }).join('') + '<td class="c y b">' + cadsN(s.total) + '</td></tr>';
-    }).join('') + '</table>', true, 18 + 190 + dcos.reduce(function (a, d) { return a + 34 * (d.tasks.length + 1); }, 0) + 52);
-
-  // B.3 Final grade: lecture + laboratory, like the workbook's "Final Grade" tab
+  // C (cont.) Final grade: lecture + laboratory, like the workbook's "Final Grade" tab
   var fgHead = banner('Final Grade (Lecture and Laboratory)', 8) +
     '<tr class="g"><th style="width:22px">No.</th><th style="text-align:left">Student</th><th>Lecture Average (%) · ' + esc(m.lecShare) + '</th>' +
     '<th>Lecture Grade</th><th>Lab Grade (%) · ' + esc(m.labShare) + '</th><th>Final Average (%)</th><th>Final Grade</th><th>Remarks</th></tr>';
@@ -3240,7 +3239,7 @@ function cadsPieces(m, tx) {
         return '<tr><td>' + esc(x.co + '. ' + x.text) + '</td><td class="c">' + cadsPct(vals[i].pct) + '</td>' + field(prefix + '_' + x.co, texts[i], 104) + '</tr>';
       }).join('') + '</table>';
   };
-  add('<div class="h2">C.&nbsp; <u>Analysis and Graphs</u></div>' +
+  add('<div class="h2">D.&nbsp; <u>Analysis and Graphs</u></div>' +
     cadsChart('Percentage of Students Achieving CO Attainment of ' + T + '%', m.CO, [{ name: 'Direct', color: CADS.BLUE, values: m.d.slice(0, m.CO.length).map(function (x) { return x.pct; }) }]));
   add(commentTable('direct_comment', m.d, tx.direct));
 
