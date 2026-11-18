@@ -3209,15 +3209,14 @@ function cadsPieces(m, tx) {
   }
 
   // C (cont.) Final grade: lecture + laboratory, like the workbook's "Final Grade" tab
-  var fgHead = banner('Class Record · Final Grade (Lecture and Laboratory)', 8) +
+  var fgHead = banner('Class Record · Final Grade (Lecture and Laboratory)', 7) +
     '<tr class="g"><th style="width:22px">No.</th><th style="text-align:left">Student</th><th>Lecture Average (%) · ' + esc(m.lecShare) + '</th>' +
-    '<th>Lecture Grade</th><th>Lab Grade (%) · ' + esc(m.labShare) + '</th><th>Final Average (%)</th><th>Final Grade</th><th>Remarks</th></tr>';
-  add('<table class="split" data-head="' + headRows(fgHead) + '"><colgroup><col style="width:30px"><col><col style="width:62px"><col style="width:56px"><col style="width:62px"><col style="width:62px"><col style="width:56px"><col style="width:96px"></colgroup>' + fgHead +
+    '<th>Lab Average (%) · ' + esc(m.labShare) + '</th><th>Final Average (%)</th><th>Final Grade</th><th>Remarks</th></tr>';
+  add('<table class="split" data-head="' + headRows(fgHead) + '"><colgroup><col style="width:30px"><col><col style="width:70px"><col style="width:70px"><col style="width:70px"><col style="width:60px"><col style="width:100px"></colgroup>' + fgHead +
     m.students.map(function (s, i) {
       var f = s.final || {};
       var lec = f.lectureAverage !== null && f.lectureAverage !== undefined ? f.lectureAverage : s.total;
       return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td><td class="c">' + cadsN(lec) + '</td>' +
-        '<td class="c">' + (f.lectureGrade === null || f.lectureGrade === undefined ? '' : cadsNum(f.lectureGrade)) + '</td>' +
         '<td class="c">' + orText(f.labAverage, f.labText) + '</td>' +
         '<td class="c">' + cadsN(f.average) + '</td><td class="c b">' + (f.grade === null || f.grade === undefined ? orText(null, f.gradeText) : cadsNum(f.grade)) + '</td>' +
         '<td class="fld hide c" data-field="remark_' + esc(s.id || s.name) + '" data-single="1" style="font-size:11px;vertical-align:middle">' + esc(cadsRemark(s)) + '</td></tr>';

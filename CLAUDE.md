@@ -125,7 +125,7 @@ change log at the bottom for every change you ship.
   row = assessment task ME / FE / UE / PS: the workbook's "Class Record" tab
   via `readClassRecordTab_` — each task as its %, component totals, SEM GRADE;
   `course.record`, `student.record` / `semGrade`) followed by the **Final
-  Grade** table (lecture average/grade, lab, final average/grade, Remarks as
+  Grade** table (lecture average, lab average, final average, final grade, Remarks as
   centred single-line fields), **D. Analysis and Graphs**. Older note: class record (fixed column widths, no note under it) also has Lab
   Grade (%) (workbook Final Grade "Lab final average"; INC / DRP when the cell
   is text), Final Average (Setup's lecture/lab shares, 80/20),
