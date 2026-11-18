@@ -553,7 +553,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   page-sized parts (heading row repeated, a CO row never left alone at the
   bottom), so every part prints at the same full size; any `table.split`
   (form, class record) is handled the same way.
-- **2026-11-18 09:30** — (not deployed yet) Course Assessment Data Sheet II:
+- **2026-11-18 09:35** — Portal deployment version 34: Course Assessment Data Sheet II:
   B. Course Assessment Record (CO on top) and C. Class Record (ME / FE / UE /
   PS on top, from the workbook's "Class Record" tab) as separate sections,
   Final Grade table after the class record, Analysis renumbered D; Remarks
