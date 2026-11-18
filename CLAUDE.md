@@ -560,7 +560,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   centred in their cells. Course Assessment Record ends at Total %CO +
   Semestral Grade (%); numerical grades and remarks only in the Class Record
   part (its Final Grade table).
-- **2026-11-18 09:55** — Portal deployment version 35: Course Assessment Data
+- **2026-11-18 09:55** — (not deployed yet) Course Assessment Data
   Sheet fix — inside the portal page its tables picked up the portal's own
   table style (uppercase dark sticky headers, no-wrap), so headers turned dark,
   names wrapped and the Final Grade table ran past the margin with Remarks
