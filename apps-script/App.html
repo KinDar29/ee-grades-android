@@ -3172,20 +3172,21 @@ function cadsPieces(m, tx) {
   var headRows = function (h) { return (h.match(/<tr/g) || []).length; };
 
   // B. Course assessment record: task scores and %CO per student (upper row = CO)
-  var daCols = 2 + dcos.reduce(function (a, d) { return a + d.tasks.length + 1; }, 0) + 1;
+  var daCols = 2 + dcos.reduce(function (a, d) { return a + d.tasks.length + 1; }, 0) + 2;
+  var semOf = function (s) { return s.semGrade !== null && s.semGrade !== undefined ? s.semGrade : (s.final && s.final.lectureAverage); };
   var daHead = banner('Course Assessment Record', daCols) +
-    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attain&shy;ment</th></tr>' +
+    '<tr class="g"><td rowspan="4"></td><th>CO</th>' + dcos.map(function (d) { return '<th colspan="' + (d.tasks.length + 1) + '">' + esc(d.co) + '</th>'; }).join('') + '<th rowspan="4">Total %CO Attain&shy;ment</th><th rowspan="4">Semestral Grade (%)</th></tr>' +
     '<tr class="g"><th>%CO</th>' + dcos.map(function (d) { return '<td class="c" colspan="' + (d.tasks.length + 1) + '">' + esc(d.weight) + '</td>'; }).join('') + '</tr>' +
     '<tr class="g"><th>ASSESSMENT TASK</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<th>' + esc(t.task) + '</th>'; }).join('') + '<th class="y">%' + esc(d.co) + '</th>'; }).join('') + '</tr>' +
     '<tr class="g at"><th>%AT</th>' + dcos.map(function (d) { return d.tasks.map(function (t) { return '<td class="c">' + esc(cadsPctText(t.weight)) + '</td>'; }).join('') + '<td class="c y">' + esc(cadsPctText(d.pctWeight)) + '</td>'; }).join('') + '</tr>' +
-    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td></tr>';
+    '<tr class="g"><th>No.</th><th style="text-align:left">Student</th>' + dcos.map(function (d) { return d.tasks.map(function () { return '<td class="c">100</td>'; }).join('') + '<td class="c y">100</td>'; }).join('') + '<td class="c y">100</td><td class="c y">100</td></tr>';
   add('<div class="h2">B.&nbsp; <u>Course Assessment Record</u></div><table class="rec split" data-head="' + headRows(daHead) + '"><colgroup><col style="width:18px"><col style="width:190px">' +
-    dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:34px">'); }).join('') + '<col style="width:52px"></colgroup>' + daHead +
+    dcos.map(function (d) { return new Array(d.tasks.length + 2).join('<col style="width:34px">'); }).join('') + '<col style="width:52px"><col style="width:52px"></colgroup>' + daHead +
     m.students.map(function (s, i) {
       return '<tr><td class="c">' + (i + 1) + '</td><td>' + esc(s.name) + '</td>' + dcos.map(function (d) {
         return s.tasks[d.co].map(function (v) { return '<td class="c">' + cadsN(v) + '</td>'; }).join('') + '<td class="c y">' + cadsN(s.co[d.co]) + '</td>';
-      }).join('') + '<td class="c y b">' + cadsN(s.total) + '</td></tr>';
-    }).join('') + '</table>', true, 18 + 190 + dcos.reduce(function (a, d) { return a + 34 * (d.tasks.length + 1); }, 0) + 52);
+      }).join('') + '<td class="c y b">' + cadsN(s.total) + '</td><td class="c y b">' + cadsN(semOf(s)) + '</td></tr>';
+    }).join('') + '</table>', true, 18 + 190 + dcos.reduce(function (a, d) { return a + 34 * (d.tasks.length + 1); }, 0) + 52 + 52);
 
   // C. Class record: the workbook's "Class Record" tab (upper row = assessment task ME / FE / UE / PS) (each task as a %, each component's %, semestral grade)
   var R = c.record;
@@ -3208,7 +3209,7 @@ function cadsPieces(m, tx) {
   }
 
   // C (cont.) Final grade: lecture + laboratory, like the workbook's "Final Grade" tab
-  var fgHead = banner('Final Grade (Lecture and Laboratory)', 8) +
+  var fgHead = banner('Class Record · Final Grade (Lecture and Laboratory)', 8) +
     '<tr class="g"><th style="width:22px">No.</th><th style="text-align:left">Student</th><th>Lecture Average (%) · ' + esc(m.lecShare) + '</th>' +
     '<th>Lecture Grade</th><th>Lab Grade (%) · ' + esc(m.labShare) + '</th><th>Final Average (%)</th><th>Final Grade</th><th>Remarks</th></tr>';
   add('<table class="split" data-head="' + headRows(fgHead) + '"><colgroup><col style="width:30px"><col><col style="width:62px"><col style="width:56px"><col style="width:62px"><col style="width:62px"><col style="width:56px"><col style="width:96px"></colgroup>' + fgHead +

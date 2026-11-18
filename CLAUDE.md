@@ -120,7 +120,8 @@ change log at the bottom for every change you ship.
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
   Section II: **B. Course Assessment Record** (upper row = CO: task scores,
-  %CO, Total %CO, from the Direct Assessment tab), **C. Class Record** (upper
+  %CO, Total %CO and Semestral Grade (%) — no 1.00–5.00 grades or remarks,
+  owner's rule; from the Direct Assessment tab), **C. Class Record** (upper
   row = assessment task ME / FE / UE / PS: the workbook's "Class Record" tab
   via `readClassRecordTab_` — each task as its %, component totals, SEM GRADE;
   `course.record`, `student.record` / `semGrade`) followed by the **Final
@@ -556,4 +557,6 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   B. Course Assessment Record (CO on top) and C. Class Record (ME / FE / UE /
   PS on top, from the workbook's "Class Record" tab) as separate sections,
   Final Grade table after the class record, Analysis renumbered D; Remarks
-  centred in their cells.
+  centred in their cells. Course Assessment Record ends at Total %CO +
+  Semestral Grade (%); numerical grades and remarks only in the Class Record
+  part (its Final Grade table).
