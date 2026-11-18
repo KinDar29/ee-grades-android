@@ -119,7 +119,13 @@ change log at the bottom for every change you ship.
   from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
-  Class record (fixed column widths, ≤ 36 students per page, no note under it) also has Lab
+  Section II.B has three tables (owner: the class record is NOT the direct
+  assessment): **Class Record** = the workbook's "Class Record" tab
+  (`readClassRecordTab_`: each task as its %, component totals %ME/%FE/%UE/%PS,
+  SEM GRADE; `course.record`, `student.record` / `semGrade`), **Direct
+  Assessment** (task scores, %CO, Total %CO) and **Final Grade** (lecture
+  average/grade, lab, final average/grade, Remarks as centred single-line
+  fields). Older note: class record (fixed column widths, no note under it) also has Lab
   Grade (%) (workbook Final Grade "Lab final average"; INC / DRP when the cell
   is text), Final Average (Setup's lecture/lab shares, 80/20),
   Final Grade (1.00–5.00) — both from the workbook's **Final Grade** tab, blank
@@ -546,3 +552,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   page-sized parts (heading row repeated, a CO row never left alone at the
   bottom), so every part prints at the same full size; any `table.split`
   (form, class record) is handled the same way.
+- **2026-11-18 09:30** — (not deployed yet) Course Assessment Data Sheet II.B:
+  Class Record now comes from the workbook's "Class Record" tab; Direct
+  Assessment and Final Grade (lecture + lab, Remarks) are their own tables;
+  Remarks centred in their cells.
