@@ -119,7 +119,7 @@ change log at the bottom for every change you ship.
   from the numbers (`cadsTexts`) and are borderless PDF text fields, so the
   owner can change the wording in a PDF reader. Nothing on the page mentions
   editing (owner's request: it must read as a final report).
-  Class record (fixed column widths, ≤ 36 students per page) also has Lab
+  Class record (fixed column widths, ≤ 36 students per page, no note under it) also has Lab
   Grade (%) (workbook Final Grade "Lab final average"; INC / DRP when the cell
   is text), Final Average (Setup's lecture/lab shares, 80/20),
   Final Grade (1.00–5.00) — both from the workbook's **Final Grade** tab, blank
@@ -540,3 +540,5 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   row per Unit / CO / Hours), every piece inside the margins. Checked by
   running the real `buildCadsPdf` in Chromium on sample data
   (`/opt/npm-tools` pdf-lib + html-to-image).
+- **2026-11-18 09:05** — (not deployed yet) Course Assessment Data Sheet:
+  the explanatory note under the class record removed (owner's request).
