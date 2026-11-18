@@ -593,3 +593,11 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
 - **2026-11-18 11:04** — Data only: Sugui (24-050329) is NOT lab INC (owner's
   correction) — lab M69 back to **60**, final average 55 → 3.00 PASSED.
   Lab INC now: Calizo, Fernandez (Jeremi Kale), Viernes, Villanueva.
+- **2026-11-18 11:40** — Data only: EE121 workbook — Ulep (25-050463, 2B,
+  the 90th student) was missing from the data sheet because the **Direct
+  Assessment** and **Indirect Assessment** tabs only had 89 student rows
+  (Class Data rows 9–97). Added one row to each (copied formulas → Class
+  Data row 98) and widened their summary ranges (Direct 18:107, Indirect
+  15:104). Comparison now: direct 47.78 / 21.35 / 96.63 / 51.11, indirect
+  93.1 / 80.46 / 72.41 / 88.51. Add rows the same way if more students
+  join (Class Record and Final Grade already go further).
