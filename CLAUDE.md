@@ -247,6 +247,24 @@ change log at the bottom for every change you ship.
   down, never below the original); manual edits to a re-exam taker's cell
   are overwritten by the next sync. Web portal only — the Android app doesn't show
   assignments or exams yet.
+- `Messages.js` — **✉ Message students** (class page button → `manageMessages`
+  in App.html): one message (subject + body with placeholders `{first}`,
+  `{last}`, `{name}`, `{id}`, `{section}`, `{subject}`, `{score}`, `{max}`,
+  `{percent}` — of the chosen score column — `{grade}`, `{standing}`) to this
+  class or every section of the subject; who gets it = everyone / score in a
+  column below · at least · exactly · blank / a standing, then any student can
+  be unticked; live preview for the first student. Sends per student: an
+  e-mail (MailApp from the owner's account, one recipient each, replyTo
+  `CONTACT_EMAIL`, quota checked first) and/or a notification. `admin.message.recipients`
+  (class list + columns + quota + history), `admin.message.send` (re-reads
+  scores, names and e-mails from the sheets; the browser only sends student
+  numbers). Master tab `Messages`: one row per student per send (Batch ID,
+  rendered Subject/Body, Email To/Status SENT · NO EMAIL · FAILED, Notify, Read At).
+  Students: "✉ Messages from your instructor" card on the home page
+  (`student.home` `messages`, opening one calls `student.message.read`);
+  `student.updates` carries `messages` so the app (from 1.3.0) posts a phone
+  notification for each new unread one. {grade}/{standing} use the
+  assessment workbook's final grade when the class has one.
 - Standings (`standingOf_` in `Sections.js`), shared by the class record and
   the summary: PASSED, CONDITIONAL (4.00), FAILED, INC, DROPPED, NONE (no
   scores). INC/Dropped are set per student in the admin gradebook and stored in
@@ -608,3 +626,14 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   `makeSummaryOfGrades()` from the editor: EE121 BSECE 33 = 23 passed / 6
   conditional / 4 failed; BSEE (2A + 2B) 57 = 22 passed / 25 conditional /
   6 failed / 1 INC / 3 dropped — checked against the workbook by hand.
+- **2026-11-24** — (not deployed yet; app not released) **✉ Message students**:
+  one-click e-mail + portal/app notification to a class, all sections, or a
+  filtered list (score below/at least/blank, standing), with per-student
+  placeholders — replaces asking Claude to send results and removal-exam
+  schedules. `Messages.js`, `Api.js` routes, App.html + Styles.html (admin
+  dialog, student "Messages" card), app: `UpdateMessage`, `checkUpdates()`,
+  "Messages from your instructor" notification channel. Also carries the
+  Summary of Grades lecture + lab change (11:58 entry). Tested: admin dialog
+  and student card rendered in Chromium with mock data (filter, preview,
+  send payload); `adminMessageSend_` run in Node with stubbed Apps Script
+  services (placeholders, no-e-mail students, unknown IDs ignored).

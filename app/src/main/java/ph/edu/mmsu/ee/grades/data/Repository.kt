@@ -262,9 +262,31 @@ class Repository(
      * Asks the portal for the student's scores and returns the ones that are
      * new or changed since the last check. Updates the baseline either way.
      */
-    suspend fun findNewScores(): List<NewScore> {
+    suspend fun findNewScores(): List<NewScore> = checkUpdates().scores
+
+    /** New scores and new instructor messages since the last check. */
+    data class Updates(val scores: List<NewScore>, val messages: List<UpdateMessage>)
+
+    suspend fun checkUpdates(): Updates {
         val data = api.call("student.updates", token = requireToken())
         val updates = api.json.decodeFromJsonElement(ScoreUpdates.serializer(), data)
+        val messages = newMessages(updates.messages)
+        return Updates(newScores(updates), messages)
+    }
+
+    /**
+     * Unread messages whose id this phone has not seen before. The first check
+     * only records what is there, like the score baseline.
+     */
+    private suspend fun newMessages(all: List<UpdateMessage>): List<UpdateMessage> {
+        val seenText = store.getCache(KEY_MESSAGES_SEEN)?.let { (_, text) -> text }
+        val seen = seenText?.split('\n')?.filter { it.isNotBlank() }?.toSet()
+        store.putCache(KEY_MESSAGES_SEEN, all.joinToString("\n") { it.id })
+        if (seen == null) return emptyList()
+        return all.filter { !it.read && it.id !in seen }
+    }
+
+    private suspend fun newScores(updates: ScoreUpdates): List<NewScore> {
         val before = loadBaseline()
 
         // Keep what we knew about classes the server could not read this time,
@@ -354,6 +376,7 @@ class Repository(
         const val KEY_STUDENT_HOME = "student.home"
         const val KEY_SCORE_BASELINE = "scores.notified"
         const val KEY_ASKED_NOTIFICATIONS = "notifications.asked"
+        const val KEY_MESSAGES_SEEN = "messages.notified"
         fun keyStudentClass(id: String) = "student.class:$id"
         fun keyAdminHome(id: String) = "admin.home:$id"
         fun keyAdminSection(id: String) = "admin.section:$id"

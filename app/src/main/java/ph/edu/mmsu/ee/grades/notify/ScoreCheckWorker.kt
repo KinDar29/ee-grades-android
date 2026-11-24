@@ -32,8 +32,9 @@ class ScoreCheckWorker(
         if (!repo.hasSession() || profile == null || profile.isAdmin) return Result.success()
 
         return try {
-            val fresh = repo.findNewScores()
-            ScoreNotifier.show(applicationContext, fresh)
+            val fresh = repo.checkUpdates()
+            ScoreNotifier.show(applicationContext, fresh.scores)
+            ScoreNotifier.showMessages(applicationContext, fresh.messages)
             Result.success()
         } catch (e: CancellationException) {
             throw e

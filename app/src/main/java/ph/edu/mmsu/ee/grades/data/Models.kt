@@ -158,7 +158,20 @@ data class TokenOnly(
 data class ScoreUpdates(
     val classes: List<UpdateClass> = emptyList(),
     val scores: List<ScoreEntry> = emptyList(),
+    /** Messages from the instructor (portal 37+); older portals leave it out. */
+    val messages: List<UpdateMessage> = emptyList(),
     val failed: Int = 0
+)
+
+/** One message the instructor sent from the portal ("✉ Message students"). */
+@Serializable
+data class UpdateMessage(
+    val id: String = "",
+    val sectionId: String = "",
+    val subject: String = "",
+    val body: String = "",
+    val sentAt: String = "",
+    val read: Boolean = false
 )
 
 @Serializable

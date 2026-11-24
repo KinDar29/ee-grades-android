@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import ph.edu.mmsu.ee.grades.MainActivity
 import ph.edu.mmsu.ee.grades.R
 import ph.edu.mmsu.ee.grades.data.NewScore
+import ph.edu.mmsu.ee.grades.data.UpdateMessage
 import java.util.Locale
 
 /**
@@ -30,15 +31,71 @@ object ScoreNotifier {
     private const val NOTIFICATION_ID = 2001
     private const val MAX_LINES = 6
 
+    private const val MESSAGE_CHANNEL_ID = "instructor_messages"
+    private const val MESSAGE_NOTIFICATION_ID = 2002
+
     fun ensureChannel(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "New scores", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "When your instructor records a new or changed score"
-            }
+        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "New scores", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                    description = "When your instructor records a new or changed score"
+                }
+            )
+        }
+        if (manager.getNotificationChannel(MESSAGE_CHANNEL_ID) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(MESSAGE_CHANNEL_ID, "Messages from your instructor", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Results, schedules and other notices your instructor sends from the portal"
+                }
+            )
+        }
+    }
+
+    /**
+     * Instructor messages ("✉ Message students" in the portal). The text is
+     * personal (scores, results), so the lock screen only says a message came.
+     */
+    @SuppressLint("MissingPermission") // checked in allowed()
+    fun showMessages(context: Context, messages: List<UpdateMessage>) {
+        if (messages.isEmpty() || !allowed(context)) return
+        ensureChannel(context)
+        val open = PendingIntent.getActivity(
+            context,
+            1,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+        val first = messages.first()
+        val title = if (messages.size == 1) first.subject.ifBlank { "Message from your instructor" }
+            else "${messages.size} messages from your instructor"
+        val lockScreen = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_score)
+            .setContentTitle(if (messages.size == 1) "New message from your instructor" else title)
+            .setContentText("Open EE Grades or your e-mail to read it")
+            .build()
+        val builder = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_score)
+            .setContentTitle(title)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(lockScreen)
+        if (messages.size == 1) {
+            builder.setContentText(first.body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty())
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText(first.body))
+        } else {
+            val style = NotificationCompat.InboxStyle().setBigContentTitle(title)
+            messages.take(MAX_LINES).forEach { style.addLine(it.subject) }
+            if (messages.size > MAX_LINES) style.setSummaryText("+${messages.size - MAX_LINES} more")
+            builder.setContentText(messages.joinToString(" · ") { it.subject }).setStyle(style)
+        }
+        NotificationManagerCompat.from(context).notify(MESSAGE_NOTIFICATION_ID, builder.build())
     }
 
     private fun allowed(context: Context): Boolean {
