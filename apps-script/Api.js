@@ -107,6 +107,11 @@ function route_(action, p, token) {
     case 'student.updates':
       return studentUpdates_(requireSession_(token));
 
+    case 'student.messages':
+      return studentMessages_(requireSession_(token));
+    case 'student.message.read':
+      return studentMessageRead_(requireSession_(token), p);
+
     case 'student.class':
       return studentClass_(requireSession_(token), p.sectionId);
     case 'student.assignment.submit':
@@ -220,6 +225,10 @@ function route_(action, p, token) {
       return releaseExam_(requireSession_(token, 'admin'), p.sectionId, p.examId);
     case 'admin.exam.sync':
       return syncExamNow_(requireSession_(token, 'admin'), p.sectionId, p.examId, p.allSections === true || p.allSections === 'true');
+    case 'admin.message.recipients':
+      return adminMessageRecipients_(requireSession_(token, 'admin'), p);
+    case 'admin.message.send':
+      return adminMessageSend_(requireSession_(token, 'admin'), p);
     case 'admin.exam.reset':
       return resetExamAttempt_(requireSession_(token, 'admin'), p.sectionId, p.examId, p.studentId);
     case 'admin.direct':
@@ -325,6 +334,7 @@ function studentHome_(session) {
     activeSemesterId: active,
     classes: classes,
     announcement: s['ANNOUNCEMENT'] || '',
+    messages: messagesForStudent_(session.id),
     contactEmail: s['CONTACT_EMAIL'] || '',
     showRunningGrade: bool_(s['SHOW_RUNNING_GRADE']),
     showClassAverage: bool_(s['SHOW_CLASS_AVERAGE']),
@@ -433,7 +443,12 @@ function studentUpdates_(session) {
     });
   });
 
-  return { classes: classes, scores: scores, failed: failed, checkedAt: nowStamp_() };
+  // Messages from the instructor (Messages.js); the app posts a phone
+  // notification for every id it has not seen before.
+  var messages = messagesForStudent_(session.id).map(function (m) {
+    return { id: m.id, sectionId: m.sectionId, subject: m.subject, body: m.body, sentAt: m.sentAt, read: m.read };
+  });
+  return { classes: classes, scores: scores, messages: messages, failed: failed, checkedAt: nowStamp_() };
 }
 
 /* --------------------------------- admin --------------------------------- */

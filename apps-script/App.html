@@ -720,6 +720,8 @@ function drawStudentHome() {
       html += '<div class="alert info"><span class="ic">i</span><div>' + esc(data.announcement) + '</div></div>';
     }
 
+    html += studentMessagesHtml(data.messages);
+
     html += '<div class="row wrap" style="margin-bottom:16px">' +
       '<div><h2 style="font-size:20px">Hello, ' + esc(data.profile.firstName || data.profile.name) + '</h2>' +
       '<div class="small muted">' + esc(data.profile.id) +
@@ -761,6 +763,13 @@ function drawStudentHome() {
       drawStudentHome();
     });
     $('#content').addEventListener('click', function (e) {
+      var mb = e.target.closest('[data-msg]');
+      if (mb) {
+        var m = (data.messages || []).filter(function (x) { return x.id === mb.dataset.msg; })[0];
+        if (m) openStudentMessage(m, refreshMessageCard);
+        return;
+      }
+      if (e.target.closest('[data-msg-all]')) { openAllStudentMessages(data.messages, refreshMessageCard); return; }
       var b = e.target.closest('[data-open]');
       if (b) renderStudentClass(b.dataset.open);
     });
@@ -1955,6 +1964,240 @@ function checkedSiblings(body) {
 }
 
 /* ------------------------------ assignments ------------------------------- */
+
+/* ============================ MESSAGE STUDENTS ============================ */
+/*
+ * "✉ Message students" on the class page (Messages.js): write once, pick who
+ * gets it (everyone, a score filter or a standing), untick anyone, then one
+ * click sends each student their own e-mail and/or portal + app notification.
+ * {placeholders} are filled per student on the server; the preview below uses
+ * the same rules so the admin sees exactly what the first student will get.
+ */
+function msgRender(text, ctx) {
+  return String(text || '').replace(/\{(\w+)\}/g, function (m, k) {
+    k = k.toLowerCase();
+    return ctx.hasOwnProperty(k) && ctx[k] !== null && ctx[k] !== undefined ? String(ctx[k]) : m;
+  });
+}
+function msgNum(n) { return String(Math.round(Number(n) * 100) / 100); }
+function msgContext(st, col) {
+  var v = col ? st.scores[col.name] : null, has = v !== null && v !== undefined;
+  return {
+    first: st.first, last: st.last, name: [st.first, st.last].filter(String).join(' '),
+    id: st.id, section: st.section, subject: st.subject,
+    score: has ? msgNum(v) : '—', max: col ? msgNum(col.max) : '',
+    percent: has && col && col.max ? msgNum(Math.round(v / col.max * 10000) / 100) + '%' : '—',
+    grade: st.grade || '—', standing: st.standing || '—'
+  };
+}
+
+function manageMessages(section) {
+  var M = lmsModal('Message students · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name, 'msg');
+  var data = null, allSections = false, ticked = {};
+  var form = { filter: 'all', column: '', op: 'lt', value: '', standing: 'CONDITIONAL', subject: '', body: '', email: true, notify: true };
+  var keyOf = function (st) { return st.sectionId + '|' + st.id; };
+
+  function load() {
+    M.body.innerHTML = '<div class="loading"><span class="spinner"></span> Reading the class list…</div>';
+    call('admin.message.recipients', { sectionId: section.id, allSections: allSections }).then(function (d) {
+      data = d;
+      ticked = {};
+      if (form.column && !data.columns.some(function (c) { return c.name === form.column; })) form.column = '';
+      applyFilter();
+      draw();
+    }).catch(function (err) { M.body.innerHTML = '<div class="alert error"><span class="ic">!</span><div>' + esc(err.message) + '</div></div>'; });
+  }
+  function column() { return data.columns.filter(function (c) { return c.name === form.column; })[0] || null; }
+  function matches(st) {
+    if (form.filter === 'standing') return st.standing === form.standing;
+    if (form.filter === 'score') {
+      var col = column(); if (!col) return false;
+      var v = st.scores[col.name];
+      if (form.op === 'blank') return v === null || v === undefined;
+      if (v === null || v === undefined || form.value === '') return false;
+      var x = Number(form.value);
+      return form.op === 'lt' ? v < x : (form.op === 'ge' ? v >= x : v === x);
+    }
+    return true;
+  }
+  function applyFilter() { ticked = {}; data.students.forEach(function (st) { if (matches(st)) ticked[keyOf(st)] = true; }); }
+  function chosen() { return data.students.filter(function (st) { return ticked[keyOf(st)]; }); }
+
+  function draw() {
+    var col = column(), pick = chosen();
+    var noMail = pick.filter(function (st) { return !st.email; }).length;
+    var sib = data.sections.length > 1 || allSections;
+    var html =
+      '<div class="msg-grid"><div>' +
+      '<div class="field"><label>Classes</label>' +
+        '<label class="check"><input type="radio" name="msgScope" value="one"' + (allSections ? '' : ' checked') + '> This class only (' + esc(section.name) + ')</label>' +
+        '<label class="check"><input type="radio" name="msgScope" value="all"' + (allSections ? ' checked' : '') + '> Every section of ' + esc(section.subjectCode || 'this subject') + '</label></div>' +
+      '<div class="field"><label>Score column <span class="muted small">(for {score}, {max}, {percent} and the score filter)</span></label>' +
+        '<select id="msgCol"><option value="">— none —</option>' + data.columns.map(function (c) {
+          return '<option value="' + esc(c.name) + '"' + (c.name === form.column ? ' selected' : '') + '>' + esc(c.name) + ' (out of ' + msgNum(c.max) + ')</option>';
+        }).join('') + '</select></div>' +
+      '<div class="field"><label>Who gets it</label>' +
+        '<select id="msgFilter">' +
+          '<option value="all"' + (form.filter === 'all' ? ' selected' : '') + '>Everyone</option>' +
+          '<option value="score"' + (form.filter === 'score' ? ' selected' : '') + '>By score in the column above</option>' +
+          '<option value="standing"' + (form.filter === 'standing' ? ' selected' : '') + '>By standing</option></select>' +
+        (form.filter === 'score' ? '<div class="row wrap" style="gap:8px;margin-top:6px;justify-content:flex-start">' +
+          '<select id="msgOp" style="width:auto">' + [['lt', 'below'], ['ge', 'at least'], ['eq', 'exactly'], ['blank', 'no score (absent)']].map(function (o) {
+            return '<option value="' + o[0] + '"' + (form.op === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+          (form.op === 'blank' ? '' : '<input type="number" id="msgVal" step="any" style="width:100px" value="' + esc(form.value) + '" placeholder="e.g. 25">') +
+          (col ? '' : '<span class="small muted">Pick the score column first.</span>') + '</div>' : '') +
+        (form.filter === 'standing' ? '<select id="msgStanding" style="margin-top:6px">' + ['PASSED', 'CONDITIONAL', 'FAILED', 'INC', 'DROPPED'].map(function (s) {
+          return '<option' + (form.standing === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>' : '') +
+      '</div>' +
+      '<div class="row" style="margin:4px 0 6px"><b>' + pick.length + '</b>&nbsp;of ' + data.students.length + ' ticked' +
+        (noMail ? ' · <span class="muted">&nbsp;' + noMail + ' without an e-mail address</span>' : '') +
+        '<div class="spacer"></div><button class="btn sm ghost" id="msgAll">Tick all</button><button class="btn sm ghost" id="msgNone">Untick all</button></div>' +
+      '<div class="msg-list">' + data.students.map(function (st) {
+        var v = col ? st.scores[col.name] : null;
+        return '<label class="msg-row"><input type="checkbox" data-k="' + esc(keyOf(st)) + '"' + (ticked[keyOf(st)] ? ' checked' : '') + '>' +
+          '<span class="nm">' + esc(st.last + ', ' + st.first) + (sib ? ' <span class="muted small">' + esc(st.section) + '</span>' : '') +
+            (st.email ? '' : ' <span class="badge" title="No e-mail address on file — gets the notification only">no e-mail</span>') + '</span>' +
+          (col ? '<span class="sc">' + (v === null || v === undefined ? '—' : msgNum(v)) + '</span>' : '') +
+          '<span class="small muted st">' + esc(st.standing || '') + '</span></label>';
+      }).join('') + '</div>' +
+      '</div><div>' +
+      '<div class="field"><label>Subject</label><input type="text" id="msgSubj" maxlength="200" value="' + esc(form.subject) + '" placeholder="e.g. EE121 Removal Examination result"></div>' +
+      '<div class="field"><label>Message</label><textarea id="msgBody" rows="11" placeholder="Hello {first},&#10;&#10;Your score: {score}/{max}…">' + esc(form.body) + '</textarea>' +
+        '<div class="small muted" style="margin-top:4px">Click to insert: ' + data.fields.map(function (f) {
+          return '<button class="btn xs ghost msg-chip" data-f="' + esc(f.key) + '" title="' + esc(f.label) + '">{' + esc(f.key) + '}</button>'; }).join(' ') + '</div></div>' +
+      '<div class="field"><label>Send as</label>' +
+        '<label class="check"><input type="checkbox" id="msgEmail"' + (form.email ? ' checked' : '') + '> E-mail (one per student, from your account — ' + data.quota + ' left today)</label>' +
+        '<label class="check"><input type="checkbox" id="msgNotify"' + (form.notify ? ' checked' : '') + '> Notification in the portal and the app</label></div>' +
+      '<div class="field" id="msgPrev">' + previewHtml() + '</div>' +
+      '<button class="btn primary" id="msgSend"' + (pick.length ? '' : ' disabled') + '>✉ Send to ' + pick.length + ' student' + (pick.length === 1 ? '' : 's') + '</button>' +
+      '</div></div>' +
+      (data.history.length ? '<h4 style="margin:18px 0 6px">Sent before</h4><table class="small"><tr><th>When</th><th>Subject</th><th>Students</th><th>E-mailed</th><th>Opened</th></tr>' +
+        data.history.map(function (h) {
+          return '<tr><td>' + esc(h.sentAt) + '</td><td>' + esc(h.subject) + '</td><td>' + h.total + '</td><td>' + h.emailed + '</td><td>' + (h.notify ? h.read : '—') + '</td></tr>';
+        }).join('') + '</table>' : '');
+    M.body.innerHTML = html;
+    bind();
+  }
+
+  function previewHtml() {
+    var col = column(), first = chosen()[0];
+    return '<label>Preview' + (first ? ' — ' + esc(first.last + ', ' + first.first) : '') + '</label>' +
+      (first ? '<div class="msg-preview"><b>' + esc(msgRender(form.subject, msgContext(first, col)) || '(no subject)') + '</b>\n\n' +
+        esc(msgRender(form.body, msgContext(first, col)) || '(no message)') + '</div>' : '<p class="small muted">Tick at least one student.</p>');
+  }
+  function keep() {
+    var g = function (id) { return M.body.querySelector(id); };
+    form.subject = g('#msgSubj').value; form.body = g('#msgBody').value;
+    form.email = g('#msgEmail').checked; form.notify = g('#msgNotify').checked;
+  }
+  function bind() {
+    var g = function (id) { return M.body.querySelector(id); };
+    $$('input[name=msgScope]', M.body).forEach(function (r) {
+      r.addEventListener('change', function () { keep(); allSections = this.value === 'all'; load(); });
+    });
+    g('#msgCol').addEventListener('change', function () { keep(); form.column = this.value; if (form.filter === 'score') applyFilter(); draw(); });
+    g('#msgFilter').addEventListener('change', function () { keep(); form.filter = this.value; applyFilter(); draw(); });
+    if (g('#msgOp')) g('#msgOp').addEventListener('change', function () { keep(); form.op = this.value; applyFilter(); draw(); });
+    if (g('#msgVal')) g('#msgVal').addEventListener('change', function () { keep(); form.value = this.value; applyFilter(); draw(); });
+    if (g('#msgStanding')) g('#msgStanding').addEventListener('change', function () { keep(); form.standing = this.value; applyFilter(); draw(); });
+    g('#msgAll').addEventListener('click', function () { keep(); data.students.forEach(function (st) { ticked[keyOf(st)] = true; }); draw(); });
+    g('#msgNone').addEventListener('click', function () { keep(); ticked = {}; draw(); });
+    $$('.msg-list input[type=checkbox]', M.body).forEach(function (cb) {
+      cb.addEventListener('change', function () { keep(); if (this.checked) ticked[this.dataset.k] = true; else delete ticked[this.dataset.k]; draw(); });
+    });
+    // typing only refreshes the preview: a full redraw here would swallow the
+    // click on "Send" that blurs the textarea
+    ['#msgSubj', '#msgBody'].forEach(function (id) {
+      g(id).addEventListener('input', function () { keep(); g('#msgPrev').innerHTML = previewHtml(); });
+    });
+    $$('.msg-chip', M.body).forEach(function (b) {
+      b.addEventListener('click', function () {
+        var ta = g('#msgBody'), t = '{' + this.dataset.f + '}', at = ta.selectionStart || ta.value.length;
+        ta.value = ta.value.slice(0, at) + t + ta.value.slice(ta.selectionEnd || at);
+        keep(); g('#msgPrev').innerHTML = previewHtml();
+        ta.focus(); ta.selectionStart = ta.selectionEnd = at + t.length;
+      });
+    });
+    g('#msgSend').addEventListener('click', function () {
+      keep();
+      var pick = chosen(), btn = this;
+      if (!form.subject.trim() || !form.body.trim()) { toast('Write a subject and a message first.', 'error'); return; }
+      if (!form.email && !form.notify) { toast('Tick e-mail, notification or both.', 'error'); return; }
+      var how = [form.email ? 'an e-mail' : '', form.notify ? 'a portal and app notification' : ''].filter(String).join(' and ');
+      confirmDialog('Send this message?', pick.length + ' student' + (pick.length === 1 ? '' : 's') + ' will each get ' + how +
+        ' with their own name and values filled in.\n\nSubject: ' + form.subject, 'Send now').then(function (ok) {
+        if (!ok) return;
+        busy(btn, true, 'Sending…');
+        call('admin.message.send', {
+          sectionId: section.id, allSections: allSections, column: form.column,
+          subject: form.subject, body: form.body, email: form.email, notify: form.notify,
+          recipients: pick.map(function (st) { return { sectionId: st.sectionId, studentId: st.id }; })
+        }).then(function (r) {
+          busy(btn, false);
+          var lines = [];
+          if (form.email) lines.push(r.emailed + ' e-mail' + (r.emailed === 1 ? '' : 's') + ' sent');
+          if (form.notify) lines.push(r.notified + ' notification' + (r.notified === 1 ? '' : 's') + ' posted');
+          var note = lines.join(' · ') + '.';
+          if (r.noEmail.length) note += '\n\nNo e-mail address on file (notification only): ' + r.noEmail.join('; ');
+          if (r.failed.length) note += '\n\nCould not e-mail: ' + r.failed.join('; ');
+          openModal({ title: 'Message sent', body: '<p class="small" style="white-space:pre-line;margin:0">' + esc(note) + '</p>',
+            footer: '<div class="spacer"></div><button class="btn primary" data-close="1">OK</button>' });
+          form.subject = ''; form.body = '';
+          load();
+        }).catch(function (err) { busy(btn, false); toast(err.message, 'error'); });
+      });
+    });
+  }
+  load();
+}
+
+/* Student side: the instructor's messages on the home page. */
+function studentMessagesHtml(list) {
+  if (!list || !list.length) return '';
+  var unread = list.filter(function (m) { return !m.read; }).length;
+  return '<div class="card msg-card" style="margin-bottom:16px"><div class="card-head"><h3>✉ Messages from your instructor</h3>' +
+    (unread ? '<span class="badge new">' + unread + ' new</span>' : '') + '</div><div class="card-body tight">' +
+    list.slice(0, 6).map(function (m) {
+      return '<button class="msg-item' + (m.read ? '' : ' unread') + '" data-msg="' + esc(m.id) + '"><span class="dot"></span>' +
+        '<span class="t">' + esc(m.subject) + '</span><span class="small muted">' + esc(m.sentAt.slice(0, 16)) + '</span></button>';
+    }).join('') +
+    (list.length > 6 ? '<button class="btn sm ghost" data-msg-all="1" style="margin-top:6px">See all ' + list.length + '</button>' : '') +
+    '</div></div>';
+}
+/* Re-draws only the messages card (the home page's click handler is delegated). */
+function refreshMessageCard() {
+  var card = document.querySelector('.msg-card');
+  if (card && S.student) card.outerHTML = studentMessagesHtml(S.student.messages);
+}
+function openStudentMessage(m, onRead) {
+  openModal({
+    title: m.subject,
+    body: '<div class="small muted" style="margin-bottom:10px">' + esc(m.sentAt.slice(0, 16)) + '</div>' +
+      '<div class="msg-preview" style="max-height:none">' + esc(m.body) + '</div>',
+    footer: '<div class="spacer"></div><button class="btn primary" data-close="1">Close</button>'
+  });
+  if (!m.read) {
+    m.read = true;
+    call('student.message.read', { ids: [m.id] }).catch(function () { /* stays unread; no harm */ });
+    if (onRead) onRead();
+  }
+}
+function openAllStudentMessages(list, onRead) {
+  var mm = openModal({
+    title: 'Messages from your instructor',
+    body: list.map(function (m) {
+      return '<button class="msg-item' + (m.read ? '' : ' unread') + '" data-msg="' + esc(m.id) + '"><span class="dot"></span>' +
+        '<span class="t">' + esc(m.subject) + '</span><span class="small muted">' + esc(m.sentAt.slice(0, 16)) + '</span></button>';
+    }).join(''),
+    footer: '<div class="spacer"></div><button class="btn primary" data-close="1">Close</button>'
+  });
+  mm.root.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-msg]');
+    if (!b) return;
+    var m = list.filter(function (x) { return x.id === b.dataset.msg; })[0];
+    if (m) { mm.close(); openStudentMessage(m, onRead); }
+  });
+}
 
 function manageAssignments(section) {
   var M = lmsModal('Problem sets · ' + (section.subjectCode ? section.subjectCode + ' ' : '') + section.name);
@@ -3971,6 +4214,7 @@ function drawGradebook() {
     '<button class="btn sm" id="gbFiles">📄 Materials</button>' +
     '<button class="btn sm" id="gbAsg">📝 Problem sets</button>' +
     '<button class="btn sm" id="gbExams">🧪 Exams</button>' +
+    '<button class="btn sm" id="gbMsg">✉ Message students</button>' +
     '<button class="btn sm gold" id="gbExport">⬇ Class record (PDF)</button>' +
     '<button class="btn sm" id="gbMore">⋯</button>' +
   '</div>';
@@ -4118,6 +4362,8 @@ function bindGradebook() {
   if (asgBtn) asgBtn.addEventListener('click', function () { manageAssignments(d.section); });
   var exBtn = $('#gbExams');
   if (exBtn) exBtn.addEventListener('click', function () { manageExams(d.section); });
+  var msgBtn = $('#gbMsg');
+  if (msgBtn) msgBtn.addEventListener('click', function () { manageMessages(d.section); });
 
   var exportBtn = $('#gbExport');
   if (exportBtn) exportBtn.addEventListener('click', function () {

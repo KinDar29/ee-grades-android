@@ -15,6 +15,8 @@
  *    Failed  any other failing grade (5.00)
  *    Dropped / INC   set per student by the admin (Final Status tab)
  *  Students with no recorded scores and no status are noted in REMARKS.
+ *  Classes with a department-template assessment workbook are counted from
+ *  its Final Grade tab (lecture + laboratory) — finalGradesFromWorkbook_.
  * ============================================================================
  */
 
@@ -78,9 +80,14 @@ function summaryOfGradesData_(semesterId) {
     }
     var g = groups[k];
     g.sections.push(sec.name);
+    var fin = finalGradesFromWorkbook_(sec);
     d.rows.forEach(function (x) {
       g.total++;
       var st = standingOf_(x.grade, x.student.finalStatus);
+      // Lecture + laboratory: the assessment workbook's Final Grade tab decides,
+      // unless the portal already marks the student INC / Dropped.
+      var f = fin[str_(x.student.studentId).toLowerCase()];
+      if (f && st !== 'DROPPED' && st !== 'INC') st = f;
       if (st === 'PASSED') g.passed++;
       else if (st === 'DROPPED') g.dropped++;
       else if (st === 'INC') g.inc++;
@@ -107,6 +114,31 @@ function summaryOfGradesData_(semesterId) {
       };
     })
   };
+}
+
+/**
+ * Final standing per student ID from the class's assessment workbook (Final
+ * Grade tab: lecture + laboratory, INC / DRP when the lab says so). Empty when
+ * the class has no department-template workbook or the lab average is not in
+ * yet for a student (that student keeps the portal's lecture standing).
+ */
+function finalGradesFromWorkbook_(sec) {
+  var out = {};
+  if (!sec.workbookId) return out;
+  try {
+    var c = courseWorkbook_(sec.workbookId, true);
+    var key = sectionKey_(sec.name);
+    (c.direct.students || []).forEach(function (s) {
+      if (!s.id || !s.final || sectionKey_(s.section) !== key) return;
+      var t = str_(s.final.gradeText).toUpperCase(), g = s.final.grade;
+      var st = /^INC/.test(t) ? 'INC' : (/DROP|^DRP/.test(t) ? 'DROPPED' : '');
+      if (!st && g !== null && g !== undefined && !isNaN(g)) {
+        st = g <= 3 ? 'PASSED' : (Math.abs(g - 4) < 1e-9 ? 'CONDITIONAL' : 'FAILED');
+      }
+      if (st) out[str_(s.id).toLowerCase()] = st;
+    });
+  } catch (err) { console.warn('Summary of Grades: workbook of ' + sec.name + ': ' + err); }
+  return out;
 }
 
 /** "FIRST SEMESTER, AY 2026-2027" from the Semesters tab. */
