@@ -619,14 +619,14 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   15:104). Comparison now: direct 47.78 / 21.35 / 96.63 / 51.11, indirect
   93.1 / 80.46 / 72.41 / 88.51. Add rows the same way if more students
   join (Class Record and Final Grade already go further).
-- **2026-11-18 11:58** — (saved in the editor, not deployed yet) Summary of
+- **2026-11-18 11:58** — (live in portal deployment version 37) Summary of
   Grades counts classes that have a department-template assessment workbook
   from its **Final Grade** tab (lecture + laboratory, lab INC / DRP rules) —
   `finalGradesFromWorkbook_`; portal INC / Dropped still win. Rebuilt with
   `makeSummaryOfGrades()` from the editor: EE121 BSECE 33 = 23 passed / 6
   conditional / 4 failed; BSEE (2A + 2B) 57 = 22 passed / 25 conditional /
   6 failed / 1 INC / 3 dropped — checked against the workbook by hand.
-- **2026-11-24** — (not deployed yet; app not released) **✉ Message students**:
+- **2026-11-25 08:51** — Portal deployment version 37 (app not released yet) **✉ Message students**:
   one-click e-mail + portal/app notification to a class, all sections, or a
   filtered list (score below/at least/blank, standing), with per-student
   placeholders — replaces asking Claude to send results and removal-exam
@@ -637,3 +637,7 @@ and the AuditLog for errors. If you are that task, see its prompt for the steps.
   and student card rendered in Chromium with mock data (filter, preview,
   send payload); `adminMessageSend_` run in Node with stubbed Apps Script
   services (placeholders, no-e-mail students, unknown IDs ignored).
+  Deployed by fetching the committed files from GitHub (raw, pinned commit)
+  into the editor — editor files were first checked to be identical to the
+  repo's previous version. `tmpCheckMessages()` (temporary, removed) ran in
+  the editor: placeholders OK, Messages tab read OK, mail quota 1500.
