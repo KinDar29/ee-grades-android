@@ -766,10 +766,10 @@ function drawStudentHome() {
       var mb = e.target.closest('[data-msg]');
       if (mb) {
         var m = (data.messages || []).filter(function (x) { return x.id === mb.dataset.msg; })[0];
-        if (m) openStudentMessage(m, drawStudentHome);
+        if (m) openStudentMessage(m, refreshMessageCard);
         return;
       }
-      if (e.target.closest('[data-msg-all]')) { openAllStudentMessages(data.messages, drawStudentHome); return; }
+      if (e.target.closest('[data-msg-all]')) { openAllStudentMessages(data.messages, refreshMessageCard); return; }
       var b = e.target.closest('[data-open]');
       if (b) renderStudentClass(b.dataset.open);
     });
@@ -2163,6 +2163,11 @@ function studentMessagesHtml(list) {
     }).join('') +
     (list.length > 6 ? '<button class="btn sm ghost" data-msg-all="1" style="margin-top:6px">See all ' + list.length + '</button>' : '') +
     '</div></div>';
+}
+/* Re-draws only the messages card (the home page's click handler is delegated). */
+function refreshMessageCard() {
+  var card = document.querySelector('.msg-card');
+  if (card && S.student) card.outerHTML = studentMessagesHtml(S.student.messages);
 }
 function openStudentMessage(m, onRead) {
   openModal({
